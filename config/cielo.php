@@ -314,9 +314,7 @@ class CieloAPI {
                     $order_details = $this->getOrderDetails($order['orderNumber']);
                     
                     if ($order_details['success']) {
-                        $transactions[] = array_merge($order, $order_details['order']);
-                    } else {
-                        $transactions[] = $order;
+                        $transactions[] = $order_details['order'];
                     }
                 }
                 
@@ -345,6 +343,8 @@ class CieloAPI {
                 return 1; // Pendente
             case 'Canceled':
                 return 3; // Cancelado
+            case 'Denied':
+                return 4; // Negado
             default:
                 return 0; // Desconhecido
         }

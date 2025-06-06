@@ -71,6 +71,8 @@ function formatStatus($status) {
             return '<span class="badge bg-warning">Pendente</span>';
         case 'Canceled':
             return '<span class="badge bg-danger">Cancelado</span>';
+        case 'Denied':
+            return '<span class="badge bg-danger">Negado</span>';
         default:
             return '<span class="badge bg-secondary">Desconhecido</span>';
     }
@@ -85,7 +87,7 @@ function formatMoney($value) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transações do Link - Sistema de Pagamento</title>
+    <title>Detalhes das Transações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/styles.css" rel="stylesheet">
@@ -99,7 +101,7 @@ function formatMoney($value) {
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2 class="mb-0">
                         <i class="fas fa-receipt me-2"></i>
-                        Transações do Link
+                        Detalhes do Link de Pagamento
                     </h2>
                     <a href="meus-links.php" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-2"></i>Voltar
