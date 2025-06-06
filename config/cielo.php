@@ -1,0 +1,256 @@
+<?php
+class CieloAPI {
+    private $client_id;
+    private $client_secret;
+    private $base_url;
+    private $oauth_url;
+    private $access_token;
+    
+    public function __construct() {
+        // Production environment
+        $this->client_id = $_ENV['CIELO_CLIENT_ID'] ?? 'your_client_id';
+        $this->client_secret = $_ENV['CIELO_CLIENT_SECRET'] ?? 'your_client_secret';
+        $this->base_url = 'https://cieloecommerce.cielo.com.br/';
+        $this->oauth_url = 'https://cieloecommerce.cielo.com.br/api/public/v2/token';
+    }
+    
+    private function getAccessToken() {
+        if ($this->access_token) {
+            return $this->access_token;
+        }
+        
+        // Log das credenciais para debug (sem expor valores sensíveis)
+        error_log("Cielo OAuth Debug - Client ID configurado: " . (!empty($this->client_id) ? 'SIM' : 'NÃO'));
+        error_log("Cielo OAuth Debug - Client Secret configurado: " . (!empty($this->client_secret) ? 'SIM' : 'NÃO'));
+        error_log("Cielo OAuth Debug - URL: " . $this->oauth_url);
+        
+        // Seguindo a documentação oficial da Cielo - usar Basic Auth
+        $auth_header = base64_encode($this->client_id . ':' . $this->client_secret);
+        
+        $data = 'grant_type=client_credentials';
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->oauth_url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/x-www-form-urlencoded',
+            'Authorization: Basic ' . $auth_header
+        ));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        
+        // Log da requisição
+        error_log("Cielo OAuth Debug - Enviando requisição para token com Basic Auth");
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($ch);
+        curl_close($ch);
+        
+        // Log detalhado da resposta
+        error_log("Cielo OAuth Debug - HTTP Code: " . $http_code);
+        error_log("Cielo OAuth Debug - cURL Error: " . ($curl_error ?: 'Nenhum'));
+        error_log("Cielo OAuth Debug - Response: " . $response);
+        
+        if ($http_code == 200 || $http_code == 201) {
+            $result = json_decode($response, true);
+            if (isset($result['access_token'])) {
+                $this->access_token = $result['access_token'];
+                error_log("Cielo OAuth Debug - Token obtido com sucesso");
+                return $this->access_token;
+            } else {
+                error_log("Cielo OAuth Debug - Resposta não contém access_token: " . json_encode($result));
+                return false;
+            }
+        } else {
+            error_log("Cielo OAuth Error - HTTP Code: " . $http_code);
+            error_log("Cielo OAuth Error - Response: " . $response);
+            error_log("Cielo OAuth Error - cURL Error: " . $curl_error);
+            return false;
+        }
+    }
+    
+    public function createPaymentLink($amount, $installments, $description = 'Pagamento via Link') {
+        $access_token = $this->getAccessToken();
+        if (!$access_token) {
+            return array(
+                'success' => false,
+                'error' => 'Erro ao obter token de acesso da Cielo'
+            );
+        }
+        
+        // Usar API direta de links de pagamento
+        $url = $this->base_url . 'api/public/v1/links';
+        
+        // Calculate final amount with interest
+        $final_amount = $this->calculateFinalAmount($amount, $installments);
+        
+        $link_name = !empty($description) ? $description : 'Pagamento Digital';
+        
+        $data = array(
+            'Type' => 'Payment',
+            'Amount' => intval($final_amount * 100), // Amount in cents
+            'Description' => $link_name,
+            'Name' => $link_name,
+            'ExpiresDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')),
+            'MaxInstallments' => $installments,
+            'Shipping' => array(
+                'Type' => 'WithoutShipping'
+            )
+        );
+        
+        $headers = array(
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $access_token
+        );
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code == 201 || $http_code == 200) {
+            $result = json_decode($response, true);
+            
+            // Para API de links, o retorno direto já contém o link
+            if (isset($result['shortUrl'])) {
+                return array(
+                    'success' => true,
+                    'payment_id' => $result['id'] ?? uniqid(),
+                    'link' => $result['shortUrl'],
+                    'status' => 0
+                );
+            } elseif (isset($result['url'])) {
+                return array(
+                    'success' => true,
+                    'payment_id' => $result['id'] ?? uniqid(),
+                    'link' => $result['url'],
+                    'status' => 0
+                );
+            }
+            
+            return array(
+                'success' => false,
+                'error' => 'Link criado mas URL não encontrada',
+                'raw_response' => $response
+            );
+        } else {
+            // Log detalhado do erro
+            error_log("Cielo API Error - HTTP Code: " . $http_code);
+            error_log("Cielo API Error - Response: " . $response);
+            error_log("Cielo API Error - Request Data: " . json_encode($data));
+            error_log("Cielo API Error - Headers: " . json_encode($headers));
+            
+            $error_message = 'Erro ao criar produto na Cielo';
+            
+            // Tentar extrair mensagem de erro específica da Cielo
+            $decoded_response = json_decode($response, true);
+            if ($decoded_response && isset($decoded_response['message'])) {
+                $error_message = $decoded_response['message'];
+            } elseif ($decoded_response && isset($decoded_response['Message'])) {
+                $error_message = $decoded_response['Message'];
+            } elseif ($decoded_response && is_array($decoded_response)) {
+                $error_message = 'Erro da API: ' . json_encode($decoded_response);
+            }
+            
+            return array(
+                'success' => false,
+                'error' => $error_message,
+                'http_code' => $http_code,
+                'raw_response' => $response
+            );
+        }
+    }
+    
+    private function createPaymentLinkFromProduct($product_id) {
+        $access_token = $this->getAccessToken();
+        if (!$access_token) {
+            return false;
+        }
+        
+        $url = $this->base_url . 'api/public/v1/products/' . $product_id . '/links';
+        
+        $data = array(
+            'type' => 'PAYMENT',
+            'expiresDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')) // Link expira em 30 dias
+        );
+        
+        $headers = array(
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $access_token
+        );
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code == 201 || $http_code == 200) {
+            $result = json_decode($response, true);
+            return $result['shortUrl'] ?? $result['url'] ?? null;
+        } else {
+            error_log("Cielo Link Creation Error - HTTP Code: " . $http_code);
+            error_log("Cielo Link Creation Error - Response: " . $response);
+            return false;
+        }
+    }
+    
+    public function checkPaymentStatus($product_id) {
+        $access_token = $this->getAccessToken();
+        if (!$access_token) {
+            return array('success' => false);
+        }
+        
+        $url = $this->base_url . 'api/public/v1/products/' . $product_id;
+        
+        $headers = array(
+            'Authorization: Bearer ' . $access_token
+        );
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code == 200) {
+            $result = json_decode($response, true);
+            // A API de Link da Cielo tem status diferentes
+            // Você precisará implementar a lógica de status conforme a documentação
+            return array(
+                'success' => true,
+                'status' => $result['status'] ?? 'active'
+            );
+        }
+        
+        return array('success' => false);
+    }
+    
+    private function calculateFinalAmount($amount, $installments) {
+        if ($installments >= 4 && $installments <= 6) {
+            return $amount * 1.04; // 4% interest
+        }
+        return $amount; // No interest for 1-3 installments
+    }
+}
+?>

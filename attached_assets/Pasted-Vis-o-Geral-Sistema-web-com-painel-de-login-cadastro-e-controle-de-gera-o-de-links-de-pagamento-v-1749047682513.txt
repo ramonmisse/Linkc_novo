@@ -1,0 +1,102 @@
+Visão Geral:
+Sistema web com painel de login, cadastro e controle de geração de links de pagamento via API da Cielo. Cada usuário só pode ver os próprios links, exceto administradores e editores, que veem todos e podem alterar o status.
+
+🔐 Módulo de Autenticação:
+Login e cadastro de usuários com níveis de acesso:
+
+admin
+
+editor
+
+usuario
+
+Proteção de rotas com sessão PHP
+
+Tabela usuarios no banco de dados com campos: id, nome, email, senha_hash, nivel_acesso
+
+💳 Geração de Link:
+Página: /gerar-link.php com formulário contendo:
+
+Campo: Valor (R$)
+
+Campo: Número de parcelas (1 a 6)
+
+Regras de cálculo:
+
+Até 3x: sem juros
+
+De 4x a 6x: acrescentar 4% de juros sobre o valor total
+
+Após o envio:
+
+Calcular valor final com juros (se aplicável)
+
+Chamar API da Cielo para criar link de pagamento (usar ambiente sandbox)
+
+Salvar no banco de dados:
+
+ID do usuário
+
+Valor original
+
+Valor com juros
+
+Parcelas
+
+URL do link
+
+Status: “Aguardando Pagamento”
+
+Status da Cielo (se disponível)
+
+Data de criação
+
+📋 Página de Listagem de Links:
+Página: /meus-links.php
+
+Exibir:
+
+Valor original, valor com juros, parcelas, status, data, botão copiar link
+
+Regra de exibição:
+
+usuario: vê apenas os links criados por ele
+
+admin ou editor: vê todos os links
+
+Mostrar status do pagamento:
+
+“Aguardando Pagamento”
+
+“Pago”
+
+“Crédito Gerado”
+
+🔁 Atualização de Status:
+Implementar script de consulta via cron ou webhook com a API da Cielo para verificar status de pagamento e atualizar automaticamente.
+
+Campo no banco status_cielo atualizado automaticamente quando o pagamento for confirmado.
+
+🛠 Alteração de Status Manual:
+Somente usuários admin ou editor podem alterar o status para “Crédito Gerado”
+
+Condição: só permitir essa alteração se o status atual for “Pago”
+
+Botão na listagem que muda o status
+
+🧰 Extras Técnicos:
+Banco de dados: MySQL/MariaDB
+
+Conexão segura com PDO
+
+Estrutura MVC simples (opcional)
+
+Utilizar curl ou file_get_contents para integração com a Cielo
+
+Incluir README com instruções para:
+
+Criação do banco de dados
+
+Configuração das credenciais da Cielo
+
+Instalação local ou no servidor
