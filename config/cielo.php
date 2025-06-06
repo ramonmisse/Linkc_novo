@@ -275,17 +275,16 @@ class CieloAPI {
         if ($http_code == 200) {
             $result = json_decode($response, true);
             
-            // Se houver transações, verifica a mais recente
+            // Se houver transações, retorna todas elas
             if (!empty($result)) {
+                // Pega a transação mais recente para o status
                 $lastTransaction = end($result);
-                
-                // Mapear status da transação
                 $status = $this->mapTransactionStatus($lastTransaction['status']);
                 
                 return array(
                     'success' => true,
                     'status' => $status,
-                    'transaction' => $lastTransaction
+                    'transactions' => $result
                 );
             }
             
@@ -293,7 +292,7 @@ class CieloAPI {
             return array(
                 'success' => true,
                 'status' => 0,
-                'transaction' => null
+                'transactions' => array()
             );
         }
         

@@ -134,91 +134,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                     </thead>
                                     <tbody>
                                         <?php foreach ($payment_links as $link): ?>
-                                            <tr data-link-id="<?php echo $link['id']; ?>" data-status="<?php echo $link['status']; ?>">
-                                                <td><strong>#<?php echo $link['id']; ?></strong></td>
-                                                <td>
-                                                    <div>
-                                                        <strong><?php echo formatCurrency($link['valor_final']); ?></strong>
-                                                        <?php if ($link['valor_juros'] > 0): ?>
-                                                            <br>
-                                                            <small class="text-muted">
-                                                                Original: <?php echo formatCurrency($link['valor_original']); ?>
-                                                                <br>Juros: <?php echo formatCurrency($link['valor_juros']); ?>
-                                                            </small>
-                                                        <?php endif; ?>
+                                            <tr data-product-id="<?php echo htmlspecialchars($link['product_id']); ?>">
+                                                <td><?php echo htmlspecialchars($link['name']); ?></td>
+                                                <td><?php echo htmlspecialchars($link['description']); ?></td>
+                                                <td><?php echo number_format($link['amount'] / 100, 2, ',', '.'); ?></td>
+                                                <td class="status-cell">
+                                                    <div class="spinner-border spinner-border-sm" role="status">
+                                                        <span class="visually-hidden">Carregando...</span>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <span class="badge bg-secondary"><?php echo $link['parcelas']; ?>x</span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge <?php echo getStatusBadgeClass($link['status']); ?>">
-                                                        <?php echo htmlspecialchars($link['status']); ?>
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php if (!empty($link['url_curta'])): ?>
-                                                        <a href="<?php echo htmlspecialchars($link['url_curta']); ?>" target="_blank" class="btn btn-sm btn-primary">
-                                                            <i class="fas fa-link"></i> Link Curto
-                                                        </a>
-                                                    <?php else: ?>
-                                                        <a href="<?php echo htmlspecialchars($link['link_url']); ?>" target="_blank" class="btn btn-sm btn-primary">
-                                                            <i class="fas fa-link"></i> Link
-                                                        </a>
-                                                    <?php endif; ?>
-                                                    
-                                                    <?php if (!empty($link['data_expiracao'])): ?>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Expira em: <?php echo date('d/m/Y H:i', strtotime($link['data_expiracao'])); ?>
-                                                        </small>
-                                                    <?php endif; ?>
-                                                    
-                                                    <?php if (!empty($link['tipo_link'])): ?>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Tipo: <?php echo htmlspecialchars($link['tipo_link']); ?>
-                                                        </small>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <div>
-                                                        <?php echo date('d/m/Y', strtotime($link['created_at'])); ?>
-                                                        <br>
-                                                        <small class="text-muted"><?php echo date('H:i', strtotime($link['created_at'])); ?></small>
-                                                    </div>
-                                                </td>
-                                                <?php if (in_array($user_level, ['admin', 'editor'])): ?>
-                                                    <td>
-                                                        <small><?php echo htmlspecialchars($link['user_name'] ?? 'N/A'); ?></small>
-                                                    </td>
-                                                <?php endif; ?>
-                                                <td>
-                                                    <div class="btn-group" role="group">
-                                                        <?php if (!empty($link['link_url'])): ?>
-                                                            <button class="btn btn-sm btn-outline-primary" 
-                                                                    onclick="copyToClipboard('<?php echo htmlspecialchars($link['link_url']); ?>')" 
-                                                                    title="Copiar Link">
-                                                                <i class="fas fa-copy"></i>
-                                                            </button>
-                                                        <?php endif; ?>
-                                                        
-                                                        <?php if (in_array($user_level, ['admin', 'editor'])): ?>
-                                                            <?php if ($link['status'] === 'Pago'): ?>
-                                                                <button class="btn btn-sm btn-outline-success" 
-                                                                        onclick="updateStatus(<?php echo $link['id']; ?>, 'Crédito Gerado')"
-                                                                        title="Marcar como Crédito Gerado">
-                                                                    <i class="fas fa-check"></i>
-                                                                </button>
-                                                            <?php endif; ?>
-                                                        <?php endif; ?>
-                                                        
-                                                        <button class="btn btn-sm btn-outline-info" 
-                                                                onclick="showDetails(<?php echo htmlspecialchars(json_encode($link)); ?>)"
-                                                                title="Ver Detalhes">
-                                                            <i class="fas fa-eye"></i>
-                                                        </button>
-                                                    </div>
+                                                    <a href="<?php echo htmlspecialchars($link['shortUrl'] ?? $link['url']); ?>" target="_blank" class="btn btn-primary btn-sm">
+                                                        <i class="fas fa-external-link-alt"></i> Abrir
+                                                    </a>
+                                                    <a href="transacoes.php?id=<?php echo $link['id']; ?>" class="btn btn-info btn-sm">
+                                                        <i class="fas fa-receipt"></i> Transações
+                                                    </a>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -287,10 +218,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
             .then(data => {
                 if (data.success) {
                     // Atualiza o status na interface
-                    const statusBadge = document.querySelector(`tr[data-link-id="${linkId}"] .badge`);
+                    const statusBadge = document.querySelector(`tr[data-product-id="${linkId}"] .status-cell`);
                     if (statusBadge) {
-                        statusBadge.className = `badge ${getStatusBadgeClass(data.status)}`;
-                        statusBadge.textContent = data.status;
+                        statusBadge.innerHTML = `
+                            <div class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Carregando...</span>
+                            </div>
+                        `;
                     }
                     
                     // Se o status mudou para "Pago", mostra uma notificação

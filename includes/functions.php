@@ -51,8 +51,8 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
         
         // Save to database
         error_log("Preparando para salvar no banco de dados");
-        $query = "INSERT INTO payment_links (user_id, valor_original, valor_juros, valor_final, parcelas, link_url, payment_id, status, status_cielo, descricao, tipo_link, data_expiracao, url_completa, url_curta, created_at) 
-                  VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, 'Aguardando Pagamento', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
+        $query = "INSERT INTO payment_links (user_id, valor_original, valor_juros, valor_final, parcelas, link_url, payment_id, product_id, status, status_cielo, descricao, tipo_link, data_expiracao, url_completa, url_curta, created_at) 
+                  VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, :product_id, 'Aguardando Pagamento', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
         
         try {
             $stmt = $db->prepare($query);
@@ -66,6 +66,7 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
                 'parcelas' => $installments,
                 'link_url' => $cielo_response['link'],
                 'payment_id' => $cielo_response['payment_id'],
+                'product_id' => $cielo_response['payment_id'], // O product_id é o mesmo que payment_id na API da Cielo
                 'status_cielo' => $cielo_response['status'],
                 'descricao' => $description
             );
@@ -78,6 +79,7 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
             $stmt->bindParam(':parcelas', $installments);
             $stmt->bindParam(':link_url', $cielo_response['link']);
             $stmt->bindParam(':payment_id', $cielo_response['payment_id']);
+            $stmt->bindParam(':product_id', $cielo_response['payment_id']); // O product_id é o mesmo que payment_id
             $stmt->bindParam(':status_cielo', $cielo_response['status']);
             $stmt->bindParam(':descricao', $description);
             
@@ -208,6 +210,68 @@ function getStatusBadgeClass($status) {
             return 'bg-primary';
         default:
             return 'bg-secondary';
+    }
+}
+
+function getStatusClass($status) {
+    switch ($status) {
+        case 2: // Pago
+        case 'Paid':
+            return 'success';
+        case 1: // Autorizado
+        case 'Authorized':
+            return 'info';
+        case 3: // Negado
+        case 'Denied':
+            return 'danger';
+        case 10: // Cancelado
+        case 'Voided':
+            return 'secondary';
+        case 11: // Reembolsado
+        case 'Refunded':
+            return 'warning';
+        case 12: // Pendente
+        case 'Pending':
+            return 'warning';
+        case 13: // Abortado
+        case 'Aborted':
+            return 'danger';
+        case 20: // Agendado
+        case 'Scheduled':
+            return 'primary';
+        default:
+            return 'secondary';
+    }
+}
+
+function getStatusText($status) {
+    switch ($status) {
+        case 2:
+        case 'Paid':
+            return 'Pago';
+        case 1:
+        case 'Authorized':
+            return 'Autorizado';
+        case 3:
+        case 'Denied':
+            return 'Negado';
+        case 10:
+        case 'Voided':
+            return 'Cancelado';
+        case 11:
+        case 'Refunded':
+            return 'Reembolsado';
+        case 12:
+        case 'Pending':
+            return 'Pendente';
+        case 13:
+        case 'Aborted':
+            return 'Abortado';
+        case 20:
+        case 'Scheduled':
+            return 'Agendado';
+        default:
+            return 'Aguardando';
     }
 }
 ?>
