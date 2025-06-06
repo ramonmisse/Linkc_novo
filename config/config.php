@@ -2,6 +2,11 @@
 // Carregar variáveis de ambiente do arquivo .env
 require_once __DIR__ . '/env.php';
 
+// Configurações de erro para desenvolvimento
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 // Definir constantes usando as variáveis de ambiente
 define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
 define('DB_NAME', $_ENV['DB_NAME'] ?? 'payment_system');

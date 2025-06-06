@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                     </thead>
                                     <tbody>
                                         <?php foreach ($payment_links as $link): ?>
-                                            <tr>
+                                            <tr data-link-id="<?php echo $link['id']; ?>" data-status="<?php echo $link['status']; ?>">
                                                 <td><strong>#<?php echo $link['id']; ?></strong></td>
                                                 <td>
                                                     <div>
@@ -274,6 +274,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
     <script>
+        // Função para atualizar o status de um link específico
+        function refreshLinkStatus(linkId) {
+            fetch('update-status.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=check_cielo_status&link_id=${linkId}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Atualiza o status na interface
+                    const statusBadge = document.querySelector(`tr[data-link-id="${linkId}"] .badge`);
+                    if (statusBadge) {
+                        statusBadge.className = `badge ${getStatusBadgeClass(data.status)}`;
+                        statusBadge.textContent = data.status;
+                    }
+                    
+                    // Se o status mudou para "Pago", mostra uma notificação
+                    if (data.status === 'Pago') {
+                        showNotification('Link pago com sucesso!', 'success');
+                    }
+                }
+            })
+            .catch(error => console.error('Erro ao atualizar status:', error));
+        }
+
+        // Função para mostrar notificações
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+            notification.style.zIndex = '9999';
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(notification);
+            
+            // Remove a notificação após 5 segundos
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+
+        // Inicia a verificação automática para links pendentes
+        function startAutoRefresh() {
+            const pendingLinks = document.querySelectorAll('tr[data-status="Aguardando Pagamento"]');
+            pendingLinks.forEach(link => {
+                const linkId = link.getAttribute('data-link-id');
+                // Atualiza o status a cada 30 segundos
+                setInterval(() => refreshLinkStatus(linkId), 30000);
+            });
+        }
+
+        // Funções existentes...
         function updateStatus(linkId, newStatus) {
             document.getElementById('status-link-id').value = linkId;
             document.getElementById('status-new-status').value = newStatus;
@@ -338,6 +395,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                     return 'bg-secondary';
             }
         }
+
+        // Inicia a verificação automática quando a página carrega
+        document.addEventListener('DOMContentLoaded', startAutoRefresh);
     </script>
 </body>
 </html>

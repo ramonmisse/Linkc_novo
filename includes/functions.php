@@ -16,6 +16,9 @@ function calculateFinalAmount($amount, $installments) {
 
 function createPaymentLink($user_id, $amount, $installments, $description = '') {
     try {
+        error_log("Iniciando criação de link de pagamento");
+        error_log("Dados recebidos - user_id: $user_id, amount: $amount, installments: $installments, description: $description");
+        
         $database = new Database();
         $db = $database->getConnection();
         $cielo = new CieloAPI();
@@ -23,8 +26,12 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
         $final_amount = calculateFinalAmount($amount, $installments);
         $interest = calculateInterest($amount, $installments);
         
+        error_log("Valores calculados - final_amount: $final_amount, interest: $interest");
+        
         // Create payment link with Cielo
+        error_log("Chamando API Cielo para criar link");
         $cielo_response = $cielo->createPaymentLink($amount, $installments, $description);
+        error_log("Resposta da Cielo: " . json_encode($cielo_response));
         
         if (!$cielo_response['success']) {
             $detailed_error = $cielo_response['error'];
@@ -38,53 +45,84 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
         }
         
         // Get detailed link information
+        error_log("Buscando informações detalhadas do link");
         $link_info = $cielo->GetLinksInfo($cielo_response['payment_id']);
+        error_log("Informações do link: " . json_encode($link_info));
         
         // Save to database
+        error_log("Preparando para salvar no banco de dados");
         $query = "INSERT INTO payment_links (user_id, valor_original, valor_juros, valor_final, parcelas, link_url, payment_id, status, status_cielo, descricao, tipo_link, data_expiracao, url_completa, url_curta, created_at) 
                   VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, 'Aguardando Pagamento', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
         
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':user_id', $user_id);
-        $stmt->bindParam(':valor_original', $amount);
-        $stmt->bindParam(':valor_juros', $interest);
-        $stmt->bindParam(':valor_final', $final_amount);
-        $stmt->bindParam(':parcelas', $installments);
-        $stmt->bindParam(':link_url', $cielo_response['link']);
-        $stmt->bindParam(':payment_id', $cielo_response['payment_id']);
-        $stmt->bindParam(':status_cielo', $cielo_response['status']);
-        $stmt->bindParam(':descricao', $description);
-        
-        // Bind additional link information if available
-        if ($link_info['success']) {
-            $stmt->bindParam(':tipo_link', $link_info['data']['tipo_link']);
-            $stmt->bindParam(':data_expiracao', $link_info['data']['data_expiracao']);
-            $stmt->bindParam(':url_completa', $link_info['data']['url_completa']);
-            $stmt->bindParam(':url_curta', $link_info['data']['url_curta']);
-        } else {
-            $tipo_link = null;
-            $data_expiracao = null;
-            $url_completa = null;
-            $url_curta = null;
-            $stmt->bindParam(':tipo_link', $tipo_link);
-            $stmt->bindParam(':data_expiracao', $data_expiracao);
-            $stmt->bindParam(':url_completa', $url_completa);
-            $stmt->bindParam(':url_curta', $url_curta);
-            error_log("Erro ao obter informações detalhadas do link: " . ($link_info['error'] ?? 'Erro desconhecido'));
-        }
-        
-        if ($stmt->execute()) {
-            return array(
-                'success' => true,
-                'link_id' => $db->lastInsertId(),
-                'link_url' => $cielo_response['link']
+        try {
+            $stmt = $db->prepare($query);
+            
+            // Log dos valores que serão inseridos
+            $insert_values = array(
+                'user_id' => $user_id,
+                'valor_original' => $amount,
+                'valor_juros' => $interest,
+                'valor_final' => $final_amount,
+                'parcelas' => $installments,
+                'link_url' => $cielo_response['link'],
+                'payment_id' => $cielo_response['payment_id'],
+                'status_cielo' => $cielo_response['status'],
+                'descricao' => $description
             );
+            error_log("Valores para inserção: " . json_encode($insert_values));
+            
+            $stmt->bindParam(':user_id', $user_id);
+            $stmt->bindParam(':valor_original', $amount);
+            $stmt->bindParam(':valor_juros', $interest);
+            $stmt->bindParam(':valor_final', $final_amount);
+            $stmt->bindParam(':parcelas', $installments);
+            $stmt->bindParam(':link_url', $cielo_response['link']);
+            $stmt->bindParam(':payment_id', $cielo_response['payment_id']);
+            $stmt->bindParam(':status_cielo', $cielo_response['status']);
+            $stmt->bindParam(':descricao', $description);
+            
+            // Bind additional link information if available
+            if ($link_info['success']) {
+                error_log("Vinculando informações adicionais do link");
+                $stmt->bindParam(':tipo_link', $link_info['data']['tipo_link']);
+                $stmt->bindParam(':data_expiracao', $link_info['data']['data_expiracao']);
+                $stmt->bindParam(':url_completa', $link_info['data']['url_completa']);
+                $stmt->bindParam(':url_curta', $link_info['data']['url_curta']);
+            } else {
+                error_log("Informações adicionais do link não disponíveis");
+                $tipo_link = null;
+                $data_expiracao = null;
+                $url_completa = null;
+                $url_curta = null;
+                $stmt->bindParam(':tipo_link', $tipo_link);
+                $stmt->bindParam(':data_expiracao', $data_expiracao);
+                $stmt->bindParam(':url_completa', $url_completa);
+                $stmt->bindParam(':url_curta', $url_curta);
+                error_log("Erro ao obter informações detalhadas do link: " . ($link_info['error'] ?? 'Erro desconhecido'));
+            }
+            
+            error_log("Executando insert no banco de dados");
+            if ($stmt->execute()) {
+                error_log("Link salvo com sucesso no banco de dados");
+                return array(
+                    'success' => true,
+                    'link_id' => $db->lastInsertId(),
+                    'link_url' => $cielo_response['link']
+                );
+            }
+            
+            error_log("Erro ao executar insert no banco de dados");
+            return array('success' => false, 'message' => 'Erro ao salvar link no banco de dados');
+            
+        } catch (PDOException $e) {
+            error_log("Erro PDO ao salvar link: " . $e->getMessage());
+            error_log("SQL Query: " . $query);
+            return array('success' => false, 'message' => 'Erro ao salvar link no banco de dados: ' . $e->getMessage());
         }
-        
-        return array('success' => false, 'message' => 'Erro ao salvar link no banco de dados');
     } catch (Exception $e) {
-        error_log("Create payment link error: " . $e->getMessage());
-        return array('success' => false, 'message' => 'Erro interno do sistema');
+        error_log("Erro geral ao criar link de pagamento: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        return array('success' => false, 'message' => 'Erro interno do sistema: ' . $e->getMessage());
     }
 }
 

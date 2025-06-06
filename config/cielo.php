@@ -24,6 +24,17 @@ class CieloAPI {
         error_log("Cielo OAuth Debug - Client Secret configurado: " . (!empty($this->client_secret) ? 'SIM' : 'NÃO'));
         error_log("Cielo OAuth Debug - URL: " . $this->oauth_url);
         
+        // Verificar se as credenciais estão configuradas
+        if (empty($this->client_id) || $this->client_id === 'your_client_id') {
+            error_log("Cielo OAuth Error - Client ID não configurado");
+            return false;
+        }
+        
+        if (empty($this->client_secret) || $this->client_secret === 'your_client_secret') {
+            error_log("Cielo OAuth Error - Client Secret não configurado");
+            return false;
+        }
+        
         // Seguindo a documentação oficial da Cielo - usar Basic Auth
         $auth_header = base64_encode($this->client_id . ':' . $this->client_secret);
         
@@ -51,7 +62,9 @@ class CieloAPI {
         
         // Log detalhado da resposta
         error_log("Cielo OAuth Debug - HTTP Code: " . $http_code);
-        error_log("Cielo OAuth Debug - cURL Error: " . ($curl_error ?: 'Nenhum'));
+        if ($curl_error) {
+            error_log("Cielo OAuth Debug - cURL Error: " . $curl_error);
+        }
         error_log("Cielo OAuth Debug - Response: " . $response);
         
         if ($http_code == 200 || $http_code == 201) {
@@ -67,7 +80,9 @@ class CieloAPI {
         } else {
             error_log("Cielo OAuth Error - HTTP Code: " . $http_code);
             error_log("Cielo OAuth Error - Response: " . $response);
-            error_log("Cielo OAuth Error - cURL Error: " . $curl_error);
+            if ($curl_error) {
+                error_log("Cielo OAuth Error - cURL Error: " . $curl_error);
+            }
             return false;
         }
     }
@@ -95,8 +110,7 @@ class CieloAPI {
             'description' => $link_name,
             'showDescription' => true,
             'price' => intval($final_amount * 100), // Amount in cents
-            'weight' => 0,
-            'expirationDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')),
+            'expirationDate' => date('Y-m-d H:i:s', strtotime('+5 days')),
             'maxNumberOfInstallments' => $installments,
             'softDescriptor' => substr($link_name, 0, 13), // Máximo 13 caracteres
             'shipping' => array(
@@ -283,7 +297,12 @@ class CieloAPI {
             );
         }
 
-        $url = $this->base_url . 'api/public/v1/links/' . $link_id;
+        // Log para debug
+        error_log("GetLinksInfo - Buscando informações do link ID: " . $link_id);
+        
+        $url = $this->base_url . 'api/public/v1/products/' . $link_id;
+        
+        error_log("GetLinksInfo - URL: " . $url);
         
         $headers = array(
             'Authorization: Bearer ' . $access_token,
@@ -295,29 +314,39 @@ class CieloAPI {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($ch);
         curl_close($ch);
+        
+        error_log("GetLinksInfo - HTTP Code: " . $http_code);
+        error_log("GetLinksInfo - Response: " . $response);
+        if ($curl_error) {
+            error_log("GetLinksInfo - cURL Error: " . $curl_error);
+        }
         
         if ($http_code == 200) {
             $result = json_decode($response, true);
             
-            return array(
-                'success' => true,
-                'data' => array(
-                    'id' => $result['id'],
-                    'tipo_link' => $result['type'],
-                    'data_expiracao' => $result['expiresDate'],
-                    'url_completa' => $result['url'],
-                    'url_curta' => $result['shortUrl'],
-                    'status' => $result['status']
-                )
-            );
+            if ($result) {
+                return array(
+                    'success' => true,
+                    'data' => array(
+                        'id' => $result['id'],
+                        'tipo_link' => $result['type'],
+                        'data_expiracao' => $result['expirationDate'],
+                        'url_completa' => $result['links'][0]['url'] ?? null,
+                        'url_curta' => $result['shortUrl'] ?? null,
+                        'status' => $result['status']
+                    )
+                );
+            }
         }
         
-        error_log("Cielo GetLinksInfo Error - HTTP Code: " . $http_code);
-        error_log("Cielo GetLinksInfo Error - Response: " . $response);
+        error_log("GetLinksInfo Error - HTTP Code: " . $http_code);
+        error_log("GetLinksInfo Error - Response: " . $response);
         
         return array(
             'success' => false,
