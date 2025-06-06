@@ -3,6 +3,7 @@ session_start();
 require_once 'includes/auth.php';
 require_once 'includes/functions.php';
 require_once 'config/cielo.php';
+require_once 'config/database.php';
 
 requireLogin();
 
@@ -48,10 +49,10 @@ try {
     // Buscar transações na API da Cielo
     if (!empty($link_info['product_id'])) {
         $cielo = new CieloAPI();
-        $result = $cielo->checkPaymentStatus($link_info['product_id']);
+        $payment_status = $cielo->checkPaymentStatus($link_info['product_id']);
         
-        if ($result['success'] && isset($result['transactions'])) {
-            $transactions = $result['transactions'];
+        if ($payment_status['success'] && isset($payment_status['transactions'])) {
+            $transactions = $payment_status['transactions'];
         } else {
             $error_message = 'Não foi possível carregar as transações deste link.';
         }
@@ -60,6 +61,23 @@ try {
 } catch (Exception $e) {
     error_log("Erro ao buscar transações: " . $e->getMessage());
     $error_message = 'Erro ao carregar as informações do link.';
+}
+
+function formatStatus($status) {
+    switch ($status) {
+        case 'Paid':
+            return '<span class="badge bg-success">Pago</span>';
+        case 'Pending':
+            return '<span class="badge bg-warning">Pendente</span>';
+        case 'Canceled':
+            return '<span class="badge bg-danger">Cancelado</span>';
+        default:
+            return '<span class="badge bg-secondary">Desconhecido</span>';
+    }
+}
+
+function formatMoney($value) {
+    return 'R$ ' . number_format($value / 100, 2, ',', '.');
 }
 ?>
 <!DOCTYPE html>
@@ -103,11 +121,11 @@ try {
                             <div class="row">
                                 <div class="col-md-6">
                                     <p><strong>Descrição:</strong> <?php echo htmlspecialchars($link_info['descricao'] ?? ''); ?></p>
-                                    <p><strong>Valor:</strong> R$ <?php echo number_format(($link_info['valor_final'] ?? 0) / 100, 2, ',', '.'); ?></p>
+                                    <p><strong>Valor:</strong> <?php echo formatMoney($link_info['amount'] ?? 0); ?></p>
                                     <p><strong>Parcelas:</strong> <?php echo $link_info['parcelas']; ?>x</p>
                                 </div>
                                 <div class="col-md-6">
-                                    <p><strong>Status:</strong> <?php echo htmlspecialchars($link_info['status'] ?? 'Aguardando'); ?></p>
+                                    <p><strong>Status:</strong> <?php echo formatStatus($link_info['status'] ?? ''); ?></p>
                                     <p><strong>Criado em:</strong> <?php echo date('d/m/Y H:i', strtotime($link_info['created_at'])); ?></p>
                                     <p>
                                         <strong>Link:</strong>
@@ -150,14 +168,12 @@ try {
                                                     <tr>
                                                         <td><?php echo date('d/m/Y H:i', strtotime($transaction['created_at'] ?? '')); ?></td>
                                                         <td><?php echo htmlspecialchars($transaction['id'] ?? ''); ?></td>
-                                                        <td>R$ <?php echo number_format(($transaction['amount'] ?? 0) / 100, 2, ',', '.'); ?></td>
+                                                        <td><?php echo formatMoney($transaction['payment']['price'] ?? 0); ?></td>
                                                         <td>
-                                                            <span class="badge bg-<?php echo getStatusClass($transaction['status'] ?? ''); ?>">
-                                                                <?php echo getStatusText($transaction['status'] ?? ''); ?>
-                                                            </span>
+                                                            <?php echo formatStatus($transaction['payment']['status'] ?? ''); ?>
                                                         </td>
                                                         <td><?php echo htmlspecialchars($transaction['payment']['type'] ?? ''); ?></td>
-                                                        <td><?php echo ($transaction['payment']['installments'] ?? 1); ?>x</td>
+                                                        <td><?php echo ($transaction['payment']['numberOfPayments'] ?? 1); ?>x</td>
                                                     </tr>
                                                 <?php endif; ?>
                                             <?php endforeach; ?>

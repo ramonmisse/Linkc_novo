@@ -246,6 +246,40 @@ class CieloAPI {
         }
     }
     
+    public function getOrderDetails($order_number) {
+        $access_token = $this->getAccessToken();
+        if (!$access_token) {
+            return array('success' => false);
+        }
+        
+        $url = $this->base_url . 'api/public/v2/orders/' . $order_number;
+        
+        $headers = array(
+            'Authorization: Bearer ' . $access_token,
+            'Content-Type: application/json'
+        );
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code == 200) {
+            $result = json_decode($response, true);
+            return array(
+                'success' => true,
+                'order' => $result
+            );
+        }
+        
+        return array('success' => false);
+    }
+
     public function checkPaymentStatus($product_id) {
         $access_token = $this->getAccessToken();
         if (!$access_token) {
@@ -267,28 +301,32 @@ class CieloAPI {
         
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curl_error = curl_error($ch);
         curl_close($ch);
-        
-        error_log("Cielo Payment Status Check - Response: " . $response);
         
         if ($http_code == 200) {
             $result = json_decode($response, true);
             
-            // Se houver transações, retorna todas elas
-            if (!empty($result) && is_array($result)) {
-                // Pega a transação mais recente para o status
-                $lastTransaction = end($result);
-                $status = isset($lastTransaction['status']) ? $this->mapTransactionStatus($lastTransaction['status']) : 0;
+            if (!empty($result) && isset($result['orders'])) {
+                $transactions = array();
+                
+                foreach ($result['orders'] as $order) {
+                    // Busca detalhes completos da ordem
+                    $order_details = $this->getOrderDetails($order['orderNumber']);
+                    
+                    if ($order_details['success']) {
+                        $transactions[] = array_merge($order, $order_details['order']);
+                    } else {
+                        $transactions[] = $order;
+                    }
+                }
                 
                 return array(
                     'success' => true,
-                    'status' => $status,
-                    'transactions' => $result
+                    'status' => $this->mapTransactionStatus($result['orders'][0]['payment']['status'] ?? ''),
+                    'transactions' => $transactions
                 );
             }
             
-            // Se não houver transações, retorna status aguardando
             return array(
                 'success' => true,
                 'status' => 0,
@@ -296,42 +334,19 @@ class CieloAPI {
             );
         }
         
-        error_log("Cielo Payment Status Check Error - HTTP Code: " . $http_code);
-        if ($curl_error) {
-            error_log("Cielo Payment Status Check Error - cURL Error: " . $curl_error);
-        }
-        
         return array('success' => false);
     }
     
     private function mapTransactionStatus($status) {
         switch ($status) {
-            case 2: // Pago
             case 'Paid':
-                return 2;
-            case 1: // Autorizado
-            case 'Authorized':
-                return 1;
-            case 3: // Negado
-            case 'Denied':
-                return 3;
-            case 10: // Cancelado
-            case 'Voided':
-                return 10;
-            case 11: // Reembolsado
-            case 'Refunded':
-                return 11;
-            case 12: // Pendente
+                return 2; // Pago
             case 'Pending':
-                return 12;
-            case 13: // Abortado
-            case 'Aborted':
-                return 13;
-            case 20: // Agendado
-            case 'Scheduled':
-                return 20;
+                return 1; // Pendente
+            case 'Canceled':
+                return 3; // Cancelado
             default:
-                return 0; // Não finalizado
+                return 0; // Desconhecido
         }
     }
     
