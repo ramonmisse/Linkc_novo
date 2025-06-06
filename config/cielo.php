@@ -82,7 +82,7 @@ class CieloAPI {
         }
         
         // Usar API direta de links de pagamento
-        $url = $this->base_url . 'api/public/v1/links';
+        $url = $this->base_url . 'api/public/v1/products/';
         
         // Calculate final amount with interest
         $final_amount = $this->calculateFinalAmount($amount, $installments);
@@ -90,14 +90,24 @@ class CieloAPI {
         $link_name = !empty($description) ? $description : 'Pagamento Digital';
         
         $data = array(
-            'Type' => 'Payment',
-            'Amount' => intval($final_amount * 100), // Amount in cents
-            'Description' => $link_name,
-            'Name' => $link_name,
-            'ExpiresDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')),
-            'MaxInstallments' => $installments,
-            'Shipping' => array(
-                'Type' => 'WithoutShipping'
+            'type' => 'Digital',
+            'name' => $link_name,
+            'description' => $link_name,
+            'showDescription' => true,
+            'price' => intval($final_amount * 100), // Amount in cents
+            'weight' => 0,
+            'expirationDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')),
+            'maxNumberOfInstallments' => $installments,
+            'softDescriptor' => substr($link_name, 0, 13), // Máximo 13 caracteres
+            'shipping' => array(
+                'type' => 'WithoutShipping',
+                'services' => null
+            ),
+            'settings' => array(
+                'invoiceTemplateId' => null,
+                'showShippingAddress' => false,
+                'skipCart' => true,
+                'enableCart' => false
             )
         );
         
@@ -125,17 +135,21 @@ class CieloAPI {
             if (isset($result['shortUrl'])) {
                 return array(
                     'success' => true,
-                    'payment_id' => $result['id'] ?? uniqid(),
+                    'payment_id' => $result['id'],
                     'link' => $result['shortUrl'],
-                    'status' => 0
+                    'status' => $result['status'] ?? 0
                 );
-            } elseif (isset($result['url'])) {
-                return array(
-                    'success' => true,
-                    'payment_id' => $result['id'] ?? uniqid(),
-                    'link' => $result['url'],
-                    'status' => 0
-                );
+            } elseif (isset($result['id'])) {
+                // Se não tiver shortUrl, criar o link do produto
+                $link_response = $this->createPaymentLinkFromProduct($result['id']);
+                if ($link_response) {
+                    return array(
+                        'success' => true,
+                        'payment_id' => $result['id'],
+                        'link' => $link_response,
+                        'status' => $result['status'] ?? 0
+                    );
+                }
             }
             
             return array(
@@ -143,32 +157,32 @@ class CieloAPI {
                 'error' => 'Link criado mas URL não encontrada',
                 'raw_response' => $response
             );
-        } else {
-            // Log detalhado do erro
-            error_log("Cielo API Error - HTTP Code: " . $http_code);
-            error_log("Cielo API Error - Response: " . $response);
-            error_log("Cielo API Error - Request Data: " . json_encode($data));
-            error_log("Cielo API Error - Headers: " . json_encode($headers));
-            
-            $error_message = 'Erro ao criar produto na Cielo';
-            
-            // Tentar extrair mensagem de erro específica da Cielo
-            $decoded_response = json_decode($response, true);
-            if ($decoded_response && isset($decoded_response['message'])) {
-                $error_message = $decoded_response['message'];
-            } elseif ($decoded_response && isset($decoded_response['Message'])) {
-                $error_message = $decoded_response['Message'];
-            } elseif ($decoded_response && is_array($decoded_response)) {
-                $error_message = 'Erro da API: ' . json_encode($decoded_response);
-            }
-            
-            return array(
-                'success' => false,
-                'error' => $error_message,
-                'http_code' => $http_code,
-                'raw_response' => $response
-            );
         }
+        
+        // Log detalhado do erro
+        error_log("Cielo API Error - HTTP Code: " . $http_code);
+        error_log("Cielo API Error - Response: " . $response);
+        error_log("Cielo API Error - Request Data: " . json_encode($data));
+        error_log("Cielo API Error - Headers: " . json_encode($headers));
+        
+        $error_message = 'Erro ao criar produto na Cielo';
+        
+        // Tentar extrair mensagem de erro específica da Cielo
+        $decoded_response = json_decode($response, true);
+        if ($decoded_response && isset($decoded_response['message'])) {
+            $error_message = $decoded_response['message'];
+        } elseif ($decoded_response && isset($decoded_response['Message'])) {
+            $error_message = $decoded_response['Message'];
+        } elseif ($decoded_response && is_array($decoded_response)) {
+            $error_message = 'Erro da API: ' . json_encode($decoded_response);
+        }
+        
+        return array(
+            'success' => false,
+            'error' => $error_message,
+            'http_code' => $http_code,
+            'raw_response' => $response
+        );
     }
     
     private function createPaymentLinkFromProduct($product_id) {
@@ -180,8 +194,14 @@ class CieloAPI {
         $url = $this->base_url . 'api/public/v1/products/' . $product_id . '/links';
         
         $data = array(
-            'type' => 'PAYMENT',
-            'expiresDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')) // Link expira em 30 dias
+            'type' => 'immediate',
+            'quantity' => 1,
+            'price' => null, // Usar o preço do produto
+            'expirationDate' => date('Y-m-d\TH:i:s', strtotime('+30 days')),
+            'settings' => array(
+                'skipCart' => true,
+                'enableCart' => false
+            )
         );
         
         $headers = array(
@@ -207,6 +227,7 @@ class CieloAPI {
         } else {
             error_log("Cielo Link Creation Error - HTTP Code: " . $http_code);
             error_log("Cielo Link Creation Error - Response: " . $response);
+            error_log("Cielo Link Creation Error - Request Data: " . json_encode($data));
             return false;
         }
     }
