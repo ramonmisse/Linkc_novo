@@ -32,6 +32,10 @@ CREATE TABLE payment_links (
     status VARCHAR(50) DEFAULT 'Aguardando Pagamento' CHECK (status IN ('Aguardando Pagamento', 'Pago', 'Crédito Gerado', 'Cancelado')),
     status_cielo INTEGER DEFAULT 0,
     descricao TEXT,
+    tipo_link VARCHAR(50),
+    data_expiracao TIMESTAMP,
+    url_completa TEXT,
+    url_curta TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     

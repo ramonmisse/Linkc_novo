@@ -157,6 +157,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                                     </span>
                                                 </td>
                                                 <td>
+                                                    <?php if (!empty($link['url_curta'])): ?>
+                                                        <a href="<?php echo htmlspecialchars($link['url_curta']); ?>" target="_blank" class="btn btn-sm btn-primary">
+                                                            <i class="fas fa-link"></i> Link Curto
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <a href="<?php echo htmlspecialchars($link['link_url']); ?>" target="_blank" class="btn btn-sm btn-primary">
+                                                            <i class="fas fa-link"></i> Link
+                                                        </a>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if (!empty($link['data_expiracao'])): ?>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Expira em: <?php echo date('d/m/Y H:i', strtotime($link['data_expiracao'])); ?>
+                                                        </small>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if (!empty($link['tipo_link'])): ?>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Tipo: <?php echo htmlspecialchars($link['tipo_link']); ?>
+                                                        </small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
                                                     <div>
                                                         <?php echo date('d/m/Y', strtotime($link['created_at'])); ?>
                                                         <br>

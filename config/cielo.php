@@ -252,5 +252,58 @@ class CieloAPI {
         }
         return $amount; // No interest for 1-3 installments
     }
+
+    public function GetLinksInfo($link_id) {
+        $access_token = $this->getAccessToken();
+        if (!$access_token) {
+            return array(
+                'success' => false,
+                'error' => 'Erro ao obter token de acesso da Cielo'
+            );
+        }
+
+        $url = $this->base_url . 'api/public/v1/links/' . $link_id;
+        
+        $headers = array(
+            'Authorization: Bearer ' . $access_token,
+            'Content-Type: application/json'
+        );
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code == 200) {
+            $result = json_decode($response, true);
+            
+            return array(
+                'success' => true,
+                'data' => array(
+                    'id' => $result['id'],
+                    'tipo_link' => $result['type'],
+                    'data_expiracao' => $result['expiresDate'],
+                    'url_completa' => $result['url'],
+                    'url_curta' => $result['shortUrl'],
+                    'status' => $result['status']
+                )
+            );
+        }
+        
+        error_log("Cielo GetLinksInfo Error - HTTP Code: " . $http_code);
+        error_log("Cielo GetLinksInfo Error - Response: " . $response);
+        
+        return array(
+            'success' => false,
+            'error' => 'Erro ao consultar informações do link',
+            'http_code' => $http_code,
+            'raw_response' => $response
+        );
+    }
 }
 ?>

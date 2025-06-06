@@ -37,9 +37,12 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
             return array('success' => false, 'message' => $detailed_error);
         }
         
+        // Get detailed link information
+        $link_info = $cielo->GetLinksInfo($cielo_response['payment_id']);
+        
         // Save to database
-        $query = "INSERT INTO payment_links (user_id, valor_original, valor_juros, valor_final, parcelas, link_url, payment_id, status, status_cielo, descricao, created_at) 
-                  VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, 'Aguardando Pagamento', :status_cielo, :descricao, NOW())";
+        $query = "INSERT INTO payment_links (user_id, valor_original, valor_juros, valor_final, parcelas, link_url, payment_id, status, status_cielo, descricao, tipo_link, data_expiracao, url_completa, url_curta, created_at) 
+                  VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, 'Aguardando Pagamento', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
         
         $stmt = $db->prepare($query);
         $stmt->bindParam(':user_id', $user_id);
@@ -51,6 +54,24 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
         $stmt->bindParam(':payment_id', $cielo_response['payment_id']);
         $stmt->bindParam(':status_cielo', $cielo_response['status']);
         $stmt->bindParam(':descricao', $description);
+        
+        // Bind additional link information if available
+        if ($link_info['success']) {
+            $stmt->bindParam(':tipo_link', $link_info['data']['tipo_link']);
+            $stmt->bindParam(':data_expiracao', $link_info['data']['data_expiracao']);
+            $stmt->bindParam(':url_completa', $link_info['data']['url_completa']);
+            $stmt->bindParam(':url_curta', $link_info['data']['url_curta']);
+        } else {
+            $tipo_link = null;
+            $data_expiracao = null;
+            $url_completa = null;
+            $url_curta = null;
+            $stmt->bindParam(':tipo_link', $tipo_link);
+            $stmt->bindParam(':data_expiracao', $data_expiracao);
+            $stmt->bindParam(':url_completa', $url_completa);
+            $stmt->bindParam(':url_curta', $url_curta);
+            error_log("Erro ao obter informações detalhadas do link: " . ($link_info['error'] ?? 'Erro desconhecido'));
+        }
         
         if ($stmt->execute()) {
             return array(

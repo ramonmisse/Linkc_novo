@@ -34,6 +34,10 @@ CREATE TABLE payment_links (
     status ENUM('Aguardando Pagamento', 'Pago', 'Crédito Gerado', 'Cancelado') DEFAULT 'Aguardando Pagamento',
     status_cielo INT DEFAULT 0,
     descricao TEXT,
+    tipo_link VARCHAR(50),
+    data_expiracao DATETIME,
+    url_completa TEXT,
+    url_curta TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
