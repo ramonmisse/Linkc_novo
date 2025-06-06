@@ -276,10 +276,10 @@ class CieloAPI {
             $result = json_decode($response, true);
             
             // Se houver transações, retorna todas elas
-            if (!empty($result)) {
+            if (!empty($result) && is_array($result)) {
                 // Pega a transação mais recente para o status
                 $lastTransaction = end($result);
-                $status = $this->mapTransactionStatus($lastTransaction['status']);
+                $status = isset($lastTransaction['status']) ? $this->mapTransactionStatus($lastTransaction['status']) : 0;
                 
                 return array(
                     'success' => true,

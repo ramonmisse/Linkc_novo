@@ -102,16 +102,16 @@ try {
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-6">
-                                    <p><strong>Descrição:</strong> <?php echo htmlspecialchars($link_info['descricao']); ?></p>
-                                    <p><strong>Valor:</strong> R$ <?php echo number_format($link_info['valor_final'] / 100, 2, ',', '.'); ?></p>
+                                    <p><strong>Descrição:</strong> <?php echo htmlspecialchars($link_info['descricao'] ?? ''); ?></p>
+                                    <p><strong>Valor:</strong> R$ <?php echo number_format(($link_info['valor_final'] ?? 0) / 100, 2, ',', '.'); ?></p>
                                     <p><strong>Parcelas:</strong> <?php echo $link_info['parcelas']; ?>x</p>
                                 </div>
                                 <div class="col-md-6">
-                                    <p><strong>Status:</strong> <?php echo htmlspecialchars($link_info['status']); ?></p>
+                                    <p><strong>Status:</strong> <?php echo htmlspecialchars($link_info['status'] ?? 'Aguardando'); ?></p>
                                     <p><strong>Criado em:</strong> <?php echo date('d/m/Y H:i', strtotime($link_info['created_at'])); ?></p>
                                     <p>
                                         <strong>Link:</strong>
-                                        <a href="<?php echo htmlspecialchars($link_info['link_url']); ?>" target="_blank">
+                                        <a href="<?php echo htmlspecialchars($link_info['link_url'] ?? '#'); ?>" target="_blank">
                                             Abrir <i class="fas fa-external-link-alt ms-1"></i>
                                         </a>
                                     </p>
@@ -146,18 +146,20 @@ try {
                                         </thead>
                                         <tbody>
                                             <?php foreach ($transactions as $transaction): ?>
-                                                <tr>
-                                                    <td><?php echo date('d/m/Y H:i', strtotime($transaction['created_at'])); ?></td>
-                                                    <td><?php echo htmlspecialchars($transaction['id']); ?></td>
-                                                    <td>R$ <?php echo number_format($transaction['amount'] / 100, 2, ',', '.'); ?></td>
-                                                    <td>
-                                                        <span class="badge bg-<?php echo getStatusClass($transaction['status']); ?>">
-                                                            <?php echo getStatusText($transaction['status']); ?>
-                                                        </span>
-                                                    </td>
-                                                    <td><?php echo htmlspecialchars($transaction['payment']['type']); ?></td>
-                                                    <td><?php echo $transaction['payment']['installments']; ?>x</td>
-                                                </tr>
+                                                <?php if (is_array($transaction)): ?>
+                                                    <tr>
+                                                        <td><?php echo date('d/m/Y H:i', strtotime($transaction['created_at'] ?? '')); ?></td>
+                                                        <td><?php echo htmlspecialchars($transaction['id'] ?? ''); ?></td>
+                                                        <td>R$ <?php echo number_format(($transaction['amount'] ?? 0) / 100, 2, ',', '.'); ?></td>
+                                                        <td>
+                                                            <span class="badge bg-<?php echo getStatusClass($transaction['status'] ?? ''); ?>">
+                                                                <?php echo getStatusText($transaction['status'] ?? ''); ?>
+                                                            </span>
+                                                        </td>
+                                                        <td><?php echo htmlspecialchars($transaction['payment']['type'] ?? ''); ?></td>
+                                                        <td><?php echo ($transaction['payment']['installments'] ?? 1); ?>x</td>
+                                                    </tr>
+                                                <?php endif; ?>
                                             <?php endforeach; ?>
                                         </tbody>
                                     </table>

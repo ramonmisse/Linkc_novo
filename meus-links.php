@@ -134,22 +134,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                     </thead>
                                     <tbody>
                                         <?php foreach ($payment_links as $link): ?>
-                                            <tr data-product-id="<?php echo htmlspecialchars($link['product_id']); ?>">
-                                                <td><?php echo htmlspecialchars($link['name']); ?></td>
-                                                <td><?php echo htmlspecialchars($link['description']); ?></td>
-                                                <td><?php echo number_format($link['amount'] / 100, 2, ',', '.'); ?></td>
+                                            <tr data-product-id="<?php echo htmlspecialchars($link['product_id'] ?? ''); ?>">
+                                                <td><?php echo htmlspecialchars($link['descricao'] ?? ''); ?></td>
+                                                <td>R$ <?php echo number_format(($link['valor_final'] ?? 0) / 100, 2, ',', '.'); ?></td>
+                                                <td><?php echo $link['parcelas']; ?>x</td>
                                                 <td class="status-cell">
                                                     <div class="spinner-border spinner-border-sm" role="status">
                                                         <span class="visually-hidden">Carregando...</span>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <a href="<?php echo htmlspecialchars($link['shortUrl'] ?? $link['url']); ?>" target="_blank" class="btn btn-primary btn-sm">
-                                                        <i class="fas fa-external-link-alt"></i> Abrir
-                                                    </a>
-                                                    <a href="transacoes.php?id=<?php echo $link['id']; ?>" class="btn btn-info btn-sm">
-                                                        <i class="fas fa-receipt"></i> Transações
-                                                    </a>
+                                                    <div class="btn-group">
+                                                        <a href="<?php echo htmlspecialchars($link['link_url'] ?? ''); ?>" target="_blank" class="btn btn-primary btn-sm">
+                                                            <i class="fas fa-external-link-alt"></i> Abrir
+                                                        </a>
+                                                        <a href="transacoes.php?id=<?php echo $link['id']; ?>" class="btn btn-info btn-sm">
+                                                            <i class="fas fa-receipt"></i> Transações
+                                                        </a>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
