@@ -1,0 +1,24 @@
+.transaction-info {
+    padding: 10px;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+    margin-top: 10px;
+}
+
+.transaction-info p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.transaction-info strong {
+    color: #495057;
+}
+
+.status-paid { background-color: #d4edda; color: #155724; }
+.status-authorized { background-color: #cce5ff; color: #004085; }
+.status-denied { background-color: #f8d7da; color: #721c24; }
+.status-voided { background-color: #e2e3e5; color: #383d41; }
+.status-refunded { background-color: #fff3cd; color: #856404; }
+.status-pending { background-color: #fff3cd; color: #856404; }
+.status-aborted { background-color: #f8d7da; color: #721c24; }
+.status-scheduled { background-color: #d1ecf1; color: #0c5460; } 

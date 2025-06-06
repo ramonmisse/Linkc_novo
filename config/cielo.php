@@ -252,10 +252,11 @@ class CieloAPI {
             return array('success' => false);
         }
         
-        $url = $this->base_url . 'api/public/v1/products/' . $product_id;
+        $url = $this->base_url . 'api/public/v1/products/' . $product_id . '/payments';
         
         $headers = array(
-            'Authorization: Bearer ' . $access_token
+            'Authorization: Bearer ' . $access_token,
+            'Content-Type: application/json'
         );
         
         $ch = curl_init();
@@ -266,19 +267,73 @@ class CieloAPI {
         
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_error = curl_error($ch);
         curl_close($ch);
+        
+        error_log("Cielo Payment Status Check - Response: " . $response);
         
         if ($http_code == 200) {
             $result = json_decode($response, true);
-            // A API de Link da Cielo tem status diferentes
-            // Você precisará implementar a lógica de status conforme a documentação
+            
+            // Se houver transações, verifica a mais recente
+            if (!empty($result)) {
+                $lastTransaction = end($result);
+                
+                // Mapear status da transação
+                $status = $this->mapTransactionStatus($lastTransaction['status']);
+                
+                return array(
+                    'success' => true,
+                    'status' => $status,
+                    'transaction' => $lastTransaction
+                );
+            }
+            
+            // Se não houver transações, retorna status aguardando
             return array(
                 'success' => true,
-                'status' => $result['status'] ?? 'active'
+                'status' => 0,
+                'transaction' => null
             );
         }
         
+        error_log("Cielo Payment Status Check Error - HTTP Code: " . $http_code);
+        if ($curl_error) {
+            error_log("Cielo Payment Status Check Error - cURL Error: " . $curl_error);
+        }
+        
         return array('success' => false);
+    }
+    
+    private function mapTransactionStatus($status) {
+        switch ($status) {
+            case 2: // Pago
+            case 'Paid':
+                return 2;
+            case 1: // Autorizado
+            case 'Authorized':
+                return 1;
+            case 3: // Negado
+            case 'Denied':
+                return 3;
+            case 10: // Cancelado
+            case 'Voided':
+                return 10;
+            case 11: // Reembolsado
+            case 'Refunded':
+                return 11;
+            case 12: // Pendente
+            case 'Pending':
+                return 12;
+            case 13: // Abortado
+            case 'Aborted':
+                return 13;
+            case 20: // Agendado
+            case 'Scheduled':
+                return 20;
+            default:
+                return 0; // Não finalizado
+        }
     }
     
     private function calculateFinalAmount($amount, $installments) {
