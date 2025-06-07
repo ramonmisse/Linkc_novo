@@ -33,32 +33,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="css/style.css" rel="stylesheet">
+    <style>
+        .card-body {
+            overflow: visible !important;
+        }
+        .table-responsive {
+            overflow: visible !important;
+        }
+        .dropdown-menu {
+            z-index: 1021;
+        }
+        .btn-group {
+            position: relative;
+        }
+    </style>
 </head>
 <body class="bg-light">
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="dashboard.php">
-                <i class="fas fa-credit-card me-2"></i>Sistema de Pagamento
-            </a>
-            
-            <div class="navbar-nav ms-auto">
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="fas fa-user me-1"></i><?php echo htmlspecialchars($_SESSION['nome']); ?>
-                        <?php if ($_SESSION['nivel_acesso'] !== 'usuario'): ?>
-                            <span class="badge bg-warning ms-1"><?php echo strtoupper($_SESSION['nivel_acesso']); ?></span>
-                        <?php endif; ?>
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <?php include 'includes/navbar.php'; ?>
     
-    <!-- Main Content -->
     <div class="container-fluid py-4">
         <div class="row">
             <!-- Sidebar -->
@@ -126,31 +118,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                             <th>Parcelas</th>
                                             <th>Status</th>
                                             <th>Data</th>
-                                            <?php if (in_array($user_level, ['admin', 'editor'])): ?>
-                                                <th>Usuário</th>
-                                            <?php endif; ?>
+                                            <th>Usuário</th>
                                             <th>Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <?php foreach ($payment_links as $link): ?>
-                                            <tr data-product-id="<?php echo htmlspecialchars($link['product_id'] ?? ''); ?>">
+                                            <tr>
                                                 <td><?php echo htmlspecialchars($link['descricao'] ?? ''); ?></td>
                                                 <td>R$ <?php echo number_format(($link['valor_final'] ?? 0) / 100, 2, ',', '.'); ?></td>
                                                 <td><?php echo $link['parcelas']; ?>x</td>
-                                                <td class="status-cell">
-                                                    <div class="spinner-border spinner-border-sm" role="status">
-                                                        <span class="visually-hidden">Carregando...</span>
-                                                    </div>
+                                                <td>
+                                                    <span class="badge <?php echo getStatusBadgeClass($link['status']); ?>">
+                                                        <i class="fas <?php echo getStatusIcon($link['status']); ?> me-1"></i>
+                                                        <?php echo htmlspecialchars($link['status']); ?>
+                                                    </span>
                                                 </td>
+                                                <td><?php echo formatDate($link['created_at']); ?></td>
+                                                <td><?php echo htmlspecialchars($link['nome_usuario'] ?? 'N/A'); ?></td>
                                                 <td>
                                                     <div class="btn-group">
-                                                        <a href="<?php echo htmlspecialchars($link['link_url'] ?? ''); ?>" target="_blank" class="btn btn-primary btn-sm">
-                                                            <i class="fas fa-external-link-alt"></i> Abrir
-                                                        </a>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" 
+                                                                onclick="copyToClipboard('<?php echo htmlspecialchars($link['link_url']); ?>')">
+                                                            <i class="fas fa-copy"></i> Copiar Link
+                                                        </button>
                                                         <a href="transacoes.php?id=<?php echo $link['id']; ?>" class="btn btn-info btn-sm">
                                                             <i class="fas fa-receipt"></i> Transações
                                                         </a>
+                                                        <button type="button" class="btn btn-secondary btn-sm dropdown-toggle" 
+                                                                data-bs-toggle="dropdown">
+                                                            <i class="fas fa-cog"></i> Status
+                                                        </button>
+                                                        <ul class="dropdown-menu">
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" 
+                                                                   onclick="updateStatus(<?php echo $link['id']; ?>, 'Criado')">
+                                                                    <i class="fas fa-file-alt me-2"></i>Criado
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" 
+                                                                   onclick="updateStatus(<?php echo $link['id']; ?>, 'Crédito')">
+                                                                    <i class="fas fa-check-circle me-2"></i>Crédito
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" 
+                                                                   onclick="updateStatus(<?php echo $link['id']; ?>, 'Utilizado')">
+                                                                    <i class="fas fa-clock me-2"></i>Utilizado
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" 
+                                                                   onclick="updateStatus(<?php echo $link['id']; ?>, 'Inativo')">
+                                                                    <i class="fas fa-ban me-2"></i>Inativo
+                                                                </a>
+                                                            </li>
+                                                        </ul>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -175,7 +199,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                 </div>
                 <form method="POST">
                     <div class="modal-body">
-                        <p>Tem certeza que deseja alterar o status para <strong id="new-status-text"></strong>?</p>
+                        <p>Tem certeza que deseja alterar o status para 
+                            <strong>
+                                <i class="fas status-icon me-1"></i>
+                                <span id="new-status-text"></span>
+                            </strong>?
+                        </p>
                         <input type="hidden" id="status-link-id" name="link_id">
                         <input type="hidden" id="status-new-status" name="status">
                         <input type="hidden" name="update_status" value="1">
@@ -207,38 +236,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>
     <script>
-        // Função para atualizar o status de um link específico
-        function refreshLinkStatus(linkId) {
-            fetch('update-status.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=check_cielo_status&link_id=${linkId}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Atualiza o status na interface
-                    const statusBadge = document.querySelector(`tr[data-product-id="${linkId}"] .status-cell`);
-                    if (statusBadge) {
-                        statusBadge.innerHTML = `
-                            <div class="spinner-border spinner-border-sm" role="status">
-                                <span class="visually-hidden">Carregando...</span>
-                            </div>
-                        `;
-                    }
-                    
-                    // Se o status mudou para "Pago", mostra uma notificação
-                    if (data.status === 'Pago') {
-                        showNotification('Link pago com sucesso!', 'success');
-                    }
-                }
-            })
-            .catch(error => console.error('Erro ao atualizar status:', error));
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                showNotification('Link copiado com sucesso!', 'success');
+            }, function(err) {
+                showNotification('Erro ao copiar link', 'danger');
+            });
         }
 
-        // Função para mostrar notificações
         function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
             notification.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
@@ -250,32 +255,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
             `;
             document.body.appendChild(notification);
             
-            // Remove a notificação após 5 segundos
             setTimeout(() => {
                 notification.remove();
-            }, 5000);
+            }, 3000);
         }
 
-        // Inicia a verificação automática para links pendentes
-        function startAutoRefresh() {
-            const pendingLinks = document.querySelectorAll('tr[data-status="Aguardando Pagamento"]');
-            pendingLinks.forEach(link => {
-                const linkId = link.getAttribute('data-link-id');
-                // Atualiza o status a cada 30 segundos
-                setInterval(() => refreshLinkStatus(linkId), 30000);
-            });
-        }
-
-        // Funções existentes...
         function updateStatus(linkId, newStatus) {
+            const statusIcons = {
+                'Criado': 'fa-file-alt',
+                'Crédito': 'fa-check-circle',
+                'Utilizado': 'fa-clock',
+                'Inativo': 'fa-ban'
+            };
+
             document.getElementById('status-link-id').value = linkId;
             document.getElementById('status-new-status').value = newStatus;
             document.getElementById('new-status-text').textContent = newStatus;
+            document.querySelector('.status-icon').className = `fas ${statusIcons[newStatus]} status-icon me-1`;
             
             const modal = new bootstrap.Modal(document.getElementById('statusModal'));
             modal.show();
         }
-        
+
         function showDetails(link) {
             const content = document.getElementById('details-content');
             const createdDate = new Date(link.created_at).toLocaleString('pt-BR');
@@ -318,22 +319,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
             const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
             modal.show();
         }
-        
-        function getStatusBadgeClass(status) {
-            switch (status) {
-                case 'Aguardando Pagamento':
-                    return 'bg-warning';
-                case 'Pago':
-                    return 'bg-success';
-                case 'Crédito Gerado':
-                    return 'bg-primary';
-                default:
-                    return 'bg-secondary';
-            }
-        }
-
-        // Inicia a verificação automática quando a página carrega
-        document.addEventListener('DOMContentLoaded', startAutoRefresh);
     </script>
 </body>
 </html>

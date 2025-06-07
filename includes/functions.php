@@ -128,71 +128,76 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
     }
 }
 
-function getPaymentLinks($user_id, $nivel_acesso) {
-    try {
-        $database = new Database();
-        $db = $database->getConnection();
-        
-        if (in_array($nivel_acesso, ['admin', 'editor'])) {
-            // Admin and editor see all links
-            $query = "SELECT pl.*, u.nome as user_name FROM payment_links pl 
-                      LEFT JOIN usuarios u ON pl.user_id = u.id 
-                      ORDER BY pl.created_at DESC";
-            $stmt = $db->prepare($query);
-        } else {
-            // Regular users see only their links
-            $query = "SELECT * FROM payment_links WHERE user_id = :user_id ORDER BY created_at DESC";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':user_id', $user_id);
-        }
-        
+function getPaymentLinks($user_id, $user_level) {
+    $db = new Database();
+    $conn = $db->getConnection();
+    
+    // Se for admin ou editor, busca todos os links
+    if (in_array($user_level, ['admin', 'editor'])) {
+        $query = "SELECT pl.*, u.nome as nome_usuario 
+                 FROM payment_links pl 
+                 LEFT JOIN usuarios u ON pl.user_id = u.id 
+                 ORDER BY pl.created_at DESC";
+        $stmt = $conn->prepare($query);
         $stmt->execute();
-        return $stmt->fetchAll();
-    } catch (Exception $e) {
-        error_log("Get payment links error: " . $e->getMessage());
-        return array();
+    } else {
+        // Se for usuário normal, busca apenas seus links
+        $query = "SELECT pl.*, u.nome as nome_usuario 
+                 FROM payment_links pl 
+                 LEFT JOIN usuarios u ON pl.user_id = u.id 
+                 WHERE pl.user_id = :user_id 
+                 ORDER BY pl.created_at DESC";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->execute();
     }
+    
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-function updatePaymentStatus($link_id, $status, $user_level) {
+function updatePaymentStatus($link_id, $new_status, $user_level) {
+    // Verifica se o usuário tem permissão para atualizar o status
+    if (!in_array($user_level, ['admin', 'editor'])) {
+        return array(
+            'success' => false,
+            'message' => 'Você não tem permissão para alterar o status.'
+        );
+    }
+    
+    // Verifica se o status é válido
+    $valid_status = array('Criado', 'Crédito', 'Utilizado', 'Inativo');
+    if (!in_array($new_status, $valid_status)) {
+        return array(
+            'success' => false,
+            'message' => 'Status inválido.'
+        );
+    }
+    
     try {
-        $database = new Database();
-        $db = $database->getConnection();
+        $db = new Database();
+        $conn = $db->getConnection();
         
-        // Only admin and editor can update status
-        if (!in_array($user_level, ['admin', 'editor'])) {
-            return array('success' => false, 'message' => 'Acesso negado');
-        }
-        
-        // Check current status
-        $query = "SELECT status FROM payment_links WHERE id = :id";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':id', $link_id);
-        $stmt->execute();
-        $current = $stmt->fetch();
-        
-        if (!$current) {
-            return array('success' => false, 'message' => 'Link não encontrado');
-        }
-        
-        // Only allow changing to "Crédito Gerado" if current status is "Pago"
-        if ($status === 'Crédito Gerado' && $current['status'] !== 'Pago') {
-            return array('success' => false, 'message' => 'Só é possível alterar para "Crédito Gerado" quando o status for "Pago"');
-        }
-        
-        $query = "UPDATE payment_links SET status = :status, updated_at = NOW() WHERE id = :id";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':status', $status);
-        $stmt->bindParam(':id', $link_id);
+        $query = "UPDATE payment_links SET status = :status WHERE id = :id";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(':status', $new_status, PDO::PARAM_STR);
+        $stmt->bindParam(':id', $link_id, PDO::PARAM_INT);
         
         if ($stmt->execute()) {
-            return array('success' => true, 'message' => 'Status atualizado com sucesso');
+            return array(
+                'success' => true,
+                'message' => 'Status atualizado com sucesso.'
+            );
+        } else {
+            return array(
+                'success' => false,
+                'message' => 'Erro ao atualizar status.'
+            );
         }
-        
-        return array('success' => false, 'message' => 'Erro ao atualizar status');
     } catch (Exception $e) {
-        error_log("Update payment status error: " . $e->getMessage());
-        return array('success' => false, 'message' => 'Erro interno do sistema');
+        return array(
+            'success' => false,
+            'message' => 'Erro ao atualizar status: ' . $e->getMessage()
+        );
     }
 }
 
@@ -200,17 +205,47 @@ function formatCurrency($value) {
     return 'R$ ' . number_format($value, 2, ',', '.');
 }
 
+function formatDate($date) {
+    if (empty($date)) return 'Data não disponível';
+    try {
+        return date('d/m/Y H:i:s', strtotime($date));
+    } catch (Exception $e) {
+        return 'Data não disponível';
+    }
+}
+
 function getStatusBadgeClass($status) {
     switch ($status) {
-        case 'Aguardando Pagamento':
-            return 'bg-warning';
-        case 'Pago':
+        case 'Criado':
+            return 'bg-info';
+        case 'Crédito':
             return 'bg-success';
-        case 'Crédito Gerado':
-            return 'bg-primary';
+        case 'Utilizado':
+            return 'bg-warning';
+        case 'Inativo':
+            return 'bg-danger';
         default:
             return 'bg-secondary';
     }
+}
+
+function getStatusIcon($status) {
+    switch ($status) {
+        case 'Criado':
+            return 'fa-file-alt';
+        case 'Crédito':
+            return 'fa-check-circle';
+        case 'Utilizado':
+            return 'fa-clock';
+        case 'Inativo':
+            return 'fa-ban';
+        default:
+            return 'fa-question-circle';
+    }
+}
+
+function formatMoney($value) {
+    return 'R$ ' . number_format($value / 100, 2, ',', '.');
 }
 
 function getStatusClass($status) {

@@ -13,13 +13,8 @@ $error_message = '';
 $link_info = null;
 $transactions = array();
 
-// Verificar se foi fornecido um ID válido
-if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-    header('Location: meus-links.php');
-    exit;
-}
-
-$link_id = intval($_GET['id']);
+// Get link ID from URL
+$link_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Buscar informações do link
 try {
@@ -78,9 +73,6 @@ function formatStatus($status) {
     }
 }
 
-function formatMoney($value) {
-    return 'R$ ' . number_format($value / 100, 2, ',', '.');
-}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -122,17 +114,17 @@ function formatMoney($value) {
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-6">
+                                    <p><strong>ID do Link:</strong> <?php echo htmlspecialchars($link_info['id']); ?></p>
+                                    <p><strong>ID do Produto:</strong> <?php echo htmlspecialchars($link_info['product_id']); ?></p>
                                     <p><strong>Descrição:</strong> <?php echo htmlspecialchars($link_info['descricao'] ?? ''); ?></p>
                                     <p><strong>Valor:</strong> <?php echo formatMoney($link_info['amount'] ?? 0); ?></p>
-                                    <p><strong>Parcelas:</strong> <?php echo $link_info['parcelas']; ?>x</p>
                                 </div>
                                 <div class="col-md-6">
-                                    <p><strong>Status:</strong> <?php echo formatStatus($link_info['status'] ?? ''); ?></p>
-                                    <p><strong>Criado em:</strong> <?php echo date('d/m/Y H:i', strtotime($link_info['created_at'])); ?></p>
+                                    <p><strong>Data de Criação:</strong> <?php echo formatDate($link_info['created_at']); ?></p>
                                     <p>
                                         <strong>Link:</strong>
-                                        <a href="<?php echo htmlspecialchars($link_info['link_url'] ?? '#'); ?>" target="_blank">
-                                            Abrir <i class="fas fa-external-link-alt ms-1"></i>
+                                        <a href="<?php echo htmlspecialchars($link_info['link_url'] ?? '#'); ?>" target="_blank" class="btn btn-sm btn-primary">
+                                            Abrir <i class="fas fa-external-link-alt"></i>
                                         </a>
                                     </p>
                                 </div>
@@ -157,27 +149,70 @@ function formatMoney($value) {
                                         <thead>
                                             <tr>
                                                 <th>Data</th>
-                                                <th>ID Transação</th>
+                                                <th>Cod. Autorização</th>
+                                                <th>Cliente</th>
                                                 <th>Valor</th>
                                                 <th>Status</th>
                                                 <th>Forma de Pagamento</th>
                                                 <th>Parcelas</th>
+                                                <th>Detalhes</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <?php foreach ($transactions as $transaction): ?>
-                                                <?php if (is_array($transaction)): ?>
-                                                    <tr>
-                                                        <td><?php echo date('d/m/Y H:i', strtotime($transaction['created_at'] ?? '')); ?></td>
-                                                        <td><?php echo htmlspecialchars($transaction['id'] ?? ''); ?></td>
-                                                        <td><?php echo formatMoney($transaction['payment']['price'] ?? 0); ?></td>
-                                                        <td>
-                                                            <?php echo formatStatus($transaction['payment']['status'] ?? ''); ?>
-                                                        </td>
-                                                        <td><?php echo htmlspecialchars($transaction['payment']['type'] ?? ''); ?></td>
-                                                        <td><?php echo ($transaction['payment']['numberOfPayments'] ?? 1); ?>x</td>
-                                                    </tr>
-                                                <?php endif; ?>
+                                                <?php 
+                                                $createdDate = $transaction['payment']['createdDate'] ?? $transaction['createdDate'] ?? null;
+                                                ?>
+                                                <tr>
+                                                    <td><?php echo formatDate($createdDate); ?></td>
+                                                    <td><?php echo htmlspecialchars($transaction['payment']['authorizationCode'] ?? 'Não disponível'); ?></td>
+                                                    <td><?php echo htmlspecialchars($transaction['customer']['fullName'] ?? 'Não informado'); ?></td>
+                                                    <td><?php echo formatMoney($transaction['payment']['price'] ?? $transaction['cart']['items'][0]['unitPrice'] ?? 0); ?></td>
+                                                    <td><?php echo formatStatus($transaction['payment']['status'] ?? 'Desconhecido'); ?></td>
+                                                    <td><?php echo htmlspecialchars($transaction['payment']['type'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($transaction['payment']['numberOfPayments'] ?? 1); ?>x</td>
+                                                    <td>
+                                                        <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#transactionModal<?php echo $transaction['orderNumber']; ?>">
+                                                            <i class="fas fa-info-circle"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+
+                                                <!-- Modal com detalhes da transação -->
+                                                <div class="modal fade" id="transactionModal<?php echo $transaction['orderNumber']; ?>" tabindex="-1">
+                                                    <div class="modal-dialog modal-lg">
+                                                        <div class="modal-content">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Detalhes da Transação</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <div class="row">
+                                                                    <div class="col-md-6">
+                                                                        <h6>Informações do Cliente</h6>
+                                                                        <p><strong>Nome:</strong> <?php echo htmlspecialchars($transaction['customer']['fullName'] ?? 'Não informado'); ?></p>
+                                                                        <p><strong>E-mail:</strong> <?php echo htmlspecialchars($transaction['customer']['email'] ?? 'Não informado'); ?></p>
+                                                                        <p><strong>Telefone:</strong> <?php echo htmlspecialchars($transaction['customer']['phone'] ?? 'Não informado'); ?></p>
+                                                                        <p><strong>CPF/CNPJ:</strong> <?php echo htmlspecialchars($transaction['customer']['identity'] ?? 'Não informado'); ?></p>
+                                                                    </div>
+                                                                    <div class="col-md-6">
+                                                                        <h6>Informações do Pagamento</h6>
+                                                                        <?php if ($transaction['payment']['type'] == 'CreditCard'): ?>
+                                                                            <p><strong>Cartão:</strong> <?php echo htmlspecialchars($transaction['payment']['cardMaskedNumber'] ?? 'Não informado'); ?></p>
+                                                                            <p><strong>Bandeira:</strong> <?php echo htmlspecialchars($transaction['payment']['brand'] ?? 'Não informado'); ?></p>
+                                                                        <?php endif; ?>
+                                                                        <p><strong>NSU:</strong> <?php echo htmlspecialchars($transaction['payment']['nsu'] ?? 'Não informado'); ?></p>
+                                                                        <p><strong>TID:</strong> <?php echo htmlspecialchars($transaction['payment']['tid'] ?? 'Não informado'); ?></p>
+                                                                        <p><strong>Código de Autorização:</strong> <?php echo htmlspecialchars($transaction['payment']['authorizationCode'] ?? 'Não disponível'); ?></p>
+                                                                        <?php if ($transaction['payment']['status'] == 'Denied'): ?>
+                                                                            <p><strong>Código de Erro:</strong> <?php echo htmlspecialchars($transaction['payment']['errorCode'] ?? 'Não informado'); ?></p>
+                                                                        <?php endif; ?>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             <?php endforeach; ?>
                                         </tbody>
                                     </table>
