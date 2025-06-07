@@ -46,6 +46,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
         .btn-group {
             position: relative;
         }
+        @media (max-width: 768px) {
+            .table-responsive {
+                overflow-x: auto !important;
+            }
+            .table {
+                min-width: 800px;
+            }
+            .btn-group {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+            .btn-group .btn {
+                width: 100%;
+                border-radius: 0.25rem !important;
+            }
+            .dropdown-menu {
+                width: 100%;
+                position: static !important;
+                margin-top: 0.25rem !important;
+                transform: none !important;
+            }
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -119,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                             <th>Status</th>
                                             <th>Data</th>
                                             <th>Usuário</th>
-                                            <th>Ações</th>
+                                            <th class="text-end">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -136,20 +159,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                                 </td>
                                                 <td><?php echo formatDate($link['created_at']); ?></td>
                                                 <td><?php echo htmlspecialchars($link['nome_usuario'] ?? 'N/A'); ?></td>
-                                                <td>
+                                                <td class="text-end">
                                                     <div class="btn-group">
                                                         <button type="button" class="btn btn-outline-primary btn-sm" 
                                                                 onclick="copyToClipboard('<?php echo htmlspecialchars($link['link_url']); ?>')">
-                                                            <i class="fas fa-copy"></i> Copiar Link
+                                                            <i class="fas fa-copy"></i> <span class="d-none d-md-inline">Copiar Link</span>
                                                         </button>
                                                         <a href="transacoes.php?id=<?php echo $link['id']; ?>" class="btn btn-info btn-sm">
-                                                            <i class="fas fa-receipt"></i> Transações
+                                                            <i class="fas fa-receipt"></i> <span class="d-none d-md-inline">Transações</span>
                                                         </a>
                                                         <button type="button" class="btn btn-secondary btn-sm dropdown-toggle" 
                                                                 data-bs-toggle="dropdown">
-                                                            <i class="fas fa-cog"></i> Status
+                                                            <i class="fas fa-cog"></i> <span class="d-none d-md-inline">Status</span>
                                                         </button>
-                                                        <ul class="dropdown-menu">
+                                                        <ul class="dropdown-menu dropdown-menu-end">
                                                             <li>
                                                                 <a class="dropdown-item" href="#" 
                                                                    onclick="updateStatus(<?php echo $link['id']; ?>, 'Criado')">
