@@ -141,7 +141,7 @@ function getPaymentLinks($user_id, $user_level) {
         $stmt = $conn->prepare($query);
         $stmt->execute();
     } else {
-        // Se for usuário normal, busca apenas seus links
+        // Se for usuário (revendedora), busca apenas seus links
         $query = "SELECT pl.*, u.nome as nome_usuario 
                  FROM payment_links pl 
                  LEFT JOIN usuarios u ON pl.user_id = u.id 
