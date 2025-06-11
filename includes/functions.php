@@ -1,7 +1,12 @@
 <?php
-require_once 'config/config.php';
-require_once 'config/database.php';
-require_once 'config/cielo.php';
+// Define a constante da raiz do projeto se ainda não estiver definida
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', realpath(__DIR__ . '/..'));
+}
+
+require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/config/database.php';
+require_once PROJECT_ROOT . '/config/cielo.php';
 
 function calculateInterest($amount, $installments) {
     if ($installments >= 4 && $installments <= 6) {
@@ -19,9 +24,20 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
         error_log("Iniciando criação de link de pagamento");
         error_log("Dados recebidos - user_id: $user_id, amount: $amount, installments: $installments, description: $description");
         
-        $database = new Database();
-        $db = $database->getConnection();
-        $cielo = new CieloAPI();
+        $db = new Database();
+        $conn = $db->getConnection();
+        
+        // Busca a credencial do usuário
+        $stmt = $conn->prepare("SELECT credencial_cielo FROM usuarios WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$user) {
+            throw new Exception('Usuário não encontrado');
+        }
+        
+        // Instancia a API da Cielo com a credencial correta
+        $cielo = new CieloAPI($user['credencial_cielo']);
         
         $final_amount = calculateFinalAmount($amount, $installments);
         $interest = calculateInterest($amount, $installments);
@@ -55,7 +71,7 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
                   VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, :product_id, 'Aguardando Pagamento', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
         
         try {
-            $stmt = $db->prepare($query);
+            $stmt = $conn->prepare($query);
             
             // Log dos valores que serão inseridos
             $insert_values = array(
@@ -108,7 +124,7 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
                 error_log("Link salvo com sucesso no banco de dados");
                 return array(
                     'success' => true,
-                    'link_id' => $db->lastInsertId(),
+                    'link_id' => $conn->lastInsertId(),
                     'link_url' => $cielo_response['link']
                 );
             }
@@ -122,37 +138,98 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
             return array('success' => false, 'message' => 'Erro ao salvar link no banco de dados: ' . $e->getMessage());
         }
     } catch (Exception $e) {
-        error_log("Erro geral ao criar link de pagamento: " . $e->getMessage());
-        error_log("Stack trace: " . $e->getTraceAsString());
-        return array('success' => false, 'message' => 'Erro interno do sistema: ' . $e->getMessage());
+        error_log("Erro ao criar link de pagamento: " . $e->getMessage());
+        return array('success' => false, 'message' => $e->getMessage());
     }
 }
 
-function getPaymentLinks($user_id, $user_level) {
+function getPaymentLinks($user_id, $user_level, $filters = [], $page = 1, $per_page = 20) {
     $db = new Database();
     $conn = $db->getConnection();
     
-    // Se for admin ou editor, busca todos os links
-    if (in_array($user_level, ['admin', 'editor'])) {
-        $query = "SELECT pl.*, u.nome as nome_usuario 
-                 FROM payment_links pl 
-                 LEFT JOIN usuarios u ON pl.user_id = u.id 
-                 ORDER BY pl.created_at DESC";
-        $stmt = $conn->prepare($query);
-        $stmt->execute();
+    $conditions = [];
+    $params = [];
+    
+    // Se não for admin ou editor, filtra apenas pelos links do usuário
+    if (!in_array($user_level, ['admin', 'editor'])) {
+        $conditions[] = "pl.user_id = :user_id";
+        $params[':user_id'] = $user_id;
     } else {
-        // Se for usuário (revendedora), busca apenas seus links
-        $query = "SELECT pl.*, u.nome as nome_usuario 
-                 FROM payment_links pl 
-                 LEFT JOIN usuarios u ON pl.user_id = u.id 
-                 WHERE pl.user_id = :user_id 
-                 ORDER BY pl.created_at DESC";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-        $stmt->execute();
+        // Filtros apenas para admin e editor
+        if (!empty($filters['user_id'])) {
+            $conditions[] = "pl.user_id = :filter_user_id";
+            $params[':filter_user_id'] = $filters['user_id'];
+        }
+        
+        if (!empty($filters['status'])) {
+            $conditions[] = "pl.status = :status";
+            $params[':status'] = $filters['status'];
+        }
+        
+        if (!empty($filters['data_inicio'])) {
+            $conditions[] = "DATE(pl.created_at) >= :data_inicio";
+            $params[':data_inicio'] = $filters['data_inicio'];
+        }
+        
+        if (!empty($filters['data_fim'])) {
+            $conditions[] = "DATE(pl.created_at) <= :data_fim";
+            $params[':data_fim'] = $filters['data_fim'];
+        }
+        
+        if (!empty($filters['valor_min'])) {
+            $conditions[] = "pl.valor_final >= :valor_min";
+            $params[':valor_min'] = $filters['valor_min'] * 100; // Converte para centavos
+        }
+        
+        if (!empty($filters['valor_max'])) {
+            $conditions[] = "pl.valor_final <= :valor_max";
+            $params[':valor_max'] = $filters['valor_max'] * 100; // Converte para centavos
+        }
     }
     
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Monta a query base
+    $query = "FROM payment_links pl 
+             LEFT JOIN usuarios u ON pl.user_id = u.id";
+    
+    // Adiciona as condições WHERE se houver
+    if (!empty($conditions)) {
+        $query .= " WHERE " . implode(" AND ", $conditions);
+    }
+    
+    // Conta total de registros
+    $count_query = "SELECT COUNT(*) as total " . $query;
+    $stmt = $conn->prepare($count_query);
+    $stmt->execute($params);
+    $total = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    
+    // Calcula offset para paginação
+    $offset = ($page - 1) * $per_page;
+    
+    // Query final com paginação
+    $query = "SELECT pl.*, u.nome as nome_usuario " . $query . " 
+             ORDER BY pl.created_at DESC 
+             LIMIT :limit OFFSET :offset";
+    
+    $stmt = $conn->prepare($query);
+    
+    // Adiciona parâmetros de paginação
+    $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    
+    // Adiciona os demais parâmetros
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    
+    $stmt->execute();
+    $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    return [
+        'links' => $links,
+        'total' => $total,
+        'pages' => ceil($total / $per_page),
+        'current_page' => $page
+    ];
 }
 
 function updatePaymentStatus($link_id, $new_status, $user_level) {

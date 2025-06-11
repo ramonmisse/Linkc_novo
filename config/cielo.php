@@ -1,17 +1,50 @@
 <?php
+// Credenciais da Cielo
+define('CIELO_CREDENTIALS', [
+    'matriz' => [
+        'client_id' => $_ENV['CIELO_MATRIZ_CLIENT_ID'] ?? '',
+        'client_secret' => $_ENV['CIELO_MATRIZ_CLIENT_SECRET'] ?? '',
+        'environment' => $_ENV['CIELO_ENVIRONMENT'] ?? 'production'
+    ],
+    'filial' => [
+        'client_id' => $_ENV['CIELO_FILIAL_CLIENT_ID'] ?? '',
+        'client_secret' => $_ENV['CIELO_FILIAL_CLIENT_SECRET'] ?? '',
+        'environment' => $_ENV['CIELO_ENVIRONMENT'] ?? 'production'
+    ]
+]);
+
 class CieloAPI {
     private $client_id;
     private $client_secret;
+    private $environment;
     private $base_url;
     private $oauth_url;
     private $access_token;
     
-    public function __construct() {
-        // Production environment
-        $this->client_id = $_ENV['CIELO_CLIENT_ID'] ?? 'your_client_id';
-        $this->client_secret = $_ENV['CIELO_CLIENT_SECRET'] ?? 'your_client_secret';
-        $this->base_url = 'https://cieloecommerce.cielo.com.br/';
-        $this->oauth_url = 'https://cieloecommerce.cielo.com.br/api/public/v2/token';
+    public function __construct($credential_type = 'matriz') {
+        if (!isset(CIELO_CREDENTIALS[$credential_type])) {
+            throw new Exception('Tipo de credencial inválido');
+        }
+        
+        $credentials = CIELO_CREDENTIALS[$credential_type];
+        
+        // Verifica se as credenciais estão configuradas
+        if (empty($credentials['client_id']) || empty($credentials['client_secret'])) {
+            throw new Exception('Credenciais da Cielo não configuradas para: ' . $credential_type);
+        }
+        
+        $this->client_id = $credentials['client_id'];
+        $this->client_secret = $credentials['client_secret'];
+        $this->environment = $credentials['environment'];
+        
+        // Define URLs baseado no ambiente
+        if ($this->environment === 'sandbox') {
+            $this->base_url = 'https://merisandbox.cieloecommerce.cielo.com.br/';
+            $this->oauth_url = 'https://merisandbox.cieloecommerce.cielo.com.br/api/public/v2/token';
+        } else {
+            $this->base_url = 'https://cieloecommerce.cielo.com.br/';
+            $this->oauth_url = 'https://cieloecommerce.cielo.com.br/api/public/v2/token';
+        }
     }
     
     private function getAccessToken() {

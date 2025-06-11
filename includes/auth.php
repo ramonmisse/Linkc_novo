@@ -1,6 +1,11 @@
 <?php
-require_once 'config/config.php';
-require_once 'config/database.php';
+// Define a constante da raiz do projeto se ainda não estiver definida
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', realpath(__DIR__ . '/..'));
+}
+
+require_once PROJECT_ROOT . '/config/config.php';
+require_once PROJECT_ROOT . '/config/database.php';
 
 function isLoggedIn() {
     return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);

@@ -8,8 +8,37 @@ requireLogin();
 $user_id = $_SESSION['user_id'];
 $user_level = $_SESSION['nivel_acesso'];
 
-// Get all payment links
-$payment_links = getPaymentLinks($user_id, $user_level);
+// Inicializa filtros
+$filters = [];
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+
+// Processa filtros apenas para admin e editor
+if (in_array($user_level, ['admin', 'editor'])) {
+    if (!empty($_GET['filter_user'])) {
+        $filters['user_id'] = intval($_GET['filter_user']);
+    }
+    if (!empty($_GET['filter_status'])) {
+        $filters['status'] = $_GET['filter_status'];
+    }
+    if (!empty($_GET['filter_data_inicio'])) {
+        $filters['data_inicio'] = $_GET['filter_data_inicio'];
+    }
+    if (!empty($_GET['filter_data_fim'])) {
+        $filters['data_fim'] = $_GET['filter_data_fim'];
+    }
+    if (!empty($_GET['filter_valor_min'])) {
+        $filters['valor_min'] = floatval($_GET['filter_valor_min']);
+    }
+    if (!empty($_GET['filter_valor_max'])) {
+        $filters['valor_max'] = floatval($_GET['filter_valor_max']);
+    }
+}
+
+// Get all payment links with pagination
+$result = getPaymentLinks($user_id, $user_level, $filters, $page);
+$payment_links = $result['links'];
+$total_pages = $result['pages'];
+$current_page = $result['current_page'];
 
 // Handle status update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
@@ -21,7 +50,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     $message_type = $result['success'] ? 'success' : 'danger';
     
     // Refresh the links after update
-    $payment_links = getPaymentLinks($user_id, $user_level);
+    $result = getPaymentLinks($user_id, $user_level, $filters, $page);
+    $payment_links = $result['links'];
+}
+
+// Busca lista de usuários para o filtro (apenas admin e editor)
+$usuarios = [];
+if (in_array($user_level, ['admin', 'editor'])) {
+    $db = new Database();
+    $conn = $db->getConnection();
+    $stmt = $conn->query("SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome");
+    $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 <!DOCTYPE html>
@@ -45,6 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
         }
         .btn-group {
             position: relative;
+        }
+        .filter-form {
+            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
         }
         @media (max-width: 768px) {
             .table-responsive {
@@ -117,6 +162,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                         <i class="fas fa-<?php echo $message_type === 'success' ? 'check-circle' : 'exclamation-triangle'; ?> me-2"></i>
                         <?php echo htmlspecialchars($message); ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (in_array($user_level, ['admin', 'editor'])): ?>
+                    <!-- Filtros -->
+                    <div class="card mb-4">
+                        <div class="card-body filter-form">
+                            <form method="GET" class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Usuário</label>
+                                    <select name="filter_user" class="form-select">
+                                        <option value="">Todos</option>
+                                        <?php foreach ($usuarios as $usuario): ?>
+                                            <option value="<?php echo $usuario['id']; ?>" 
+                                                    <?php echo isset($filters['user_id']) && $filters['user_id'] == $usuario['id'] ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($usuario['nome']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Status</label>
+                                    <select name="filter_status" class="form-select">
+                                        <option value="">Todos</option>
+                                        <option value="Criado" <?php echo isset($filters['status']) && $filters['status'] == 'Criado' ? 'selected' : ''; ?>>Criado</option>
+                                        <option value="Crédito" <?php echo isset($filters['status']) && $filters['status'] == 'Crédito' ? 'selected' : ''; ?>>Crédito</option>
+                                        <option value="Utilizado" <?php echo isset($filters['status']) && $filters['status'] == 'Utilizado' ? 'selected' : ''; ?>>Utilizado</option>
+                                        <option value="Inativo" <?php echo isset($filters['status']) && $filters['status'] == 'Inativo' ? 'selected' : ''; ?>>Inativo</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Valor</label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" min="0" name="filter_valor_min" class="form-control" 
+                                               placeholder="Min" value="<?php echo isset($filters['valor_min']) ? $filters['valor_min'] : ''; ?>">
+                                        <input type="number" step="0.01" min="0" name="filter_valor_max" class="form-control" 
+                                               placeholder="Max" value="<?php echo isset($filters['valor_max']) ? $filters['valor_max'] : ''; ?>">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Data Início</label>
+                                    <input type="date" name="filter_data_inicio" class="form-control" 
+                                           value="<?php echo isset($filters['data_inicio']) ? $filters['data_inicio'] : ''; ?>">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Data Fim</label>
+                                    <input type="date" name="filter_data_fim" class="form-control" 
+                                           value="<?php echo isset($filters['data_fim']) ? $filters['data_fim'] : ''; ?>">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <div class="btn-group w-100">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-search me-2"></i>Filtrar
+                                        </button>
+                                        <a href="meus-links.php" class="btn btn-secondary">
+                                            <i class="fas fa-times me-2"></i>Limpar
+                                        </a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 <?php endif; ?>
                 
@@ -205,6 +311,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                                     </tbody>
                                 </table>
                             </div>
+
+                            <!-- Paginação -->
+                            <?php if ($total_pages > 1): ?>
+                                <nav aria-label="Navegação de páginas" class="mt-4">
+                                    <ul class="pagination justify-content-center">
+                                        <?php if ($current_page > 1): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page=<?php echo $current_page - 1; ?><?php echo http_build_query(array_merge($_GET, ['page' => $current_page - 1])); ?>">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </a>
+                                            </li>
+                                        <?php endif; ?>
+                                        
+                                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                                            <li class="page-item <?php echo $i == $current_page ? 'active' : ''; ?>">
+                                                <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => $i])); ?>">
+                                                    <?php echo $i; ?>
+                                                </a>
+                                            </li>
+                                        <?php endfor; ?>
+                                        
+                                        <?php if ($current_page < $total_pages): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => $current_page + 1])); ?>">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </a>
+                                            </li>
+                                        <?php endif; ?>
+                                    </ul>
+                                </nav>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
