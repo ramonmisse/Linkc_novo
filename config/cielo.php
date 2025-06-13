@@ -120,12 +120,36 @@ class CieloAPI {
         }
     }
     
+    private function mapCieloStatus($status) {
+        // Mapeamento dos status da Cielo para nossos status internos
+        switch ($status) {
+            case 'ACTIVE':
+            case 'PENDING':
+                return 'Criado';
+            case 'COMPLETED':
+            case 'PAID':
+                return 'Crédito';
+            case 'USED':
+                return 'Utilizado';
+            case 'EXPIRED':
+            case 'CANCELED':
+            case 'INACTIVE':
+                return 'Inativo';
+            default:
+                return 'Criado'; // Status padrão para casos não mapeados
+        }
+    }
+
     public function createPaymentLink($amount, $installments, $description = 'Pagamento via Link') {
         $access_token = $this->getAccessToken();
         if (!$access_token) {
             return array(
                 'success' => false,
-                'error' => 'Erro ao obter token de acesso da Cielo'
+                'error' => 'Falha ao obter token de acesso',
+                'payment_id' => null,
+                'link' => null,
+                'status' => 'Criado'
+                //'status_cielo' => 0
             );
         }
         
@@ -145,7 +169,7 @@ class CieloAPI {
             'price' => intval($final_amount * 100), // Amount in cents
             'expirationDate' => date('Y-m-d H:i:s', strtotime('+5 days')),
             'maxNumberOfInstallments' => $installments,
-            'softDescriptor' => substr($link_name, 0, 13), // Máximo 13 caracteres
+            'numberOfInstallments' => $installments,
             'shipping' => array(
                 'type' => 'WithoutShipping',
                 'services' => null
@@ -184,7 +208,8 @@ class CieloAPI {
                     'success' => true,
                     'payment_id' => $result['id'],
                     'link' => $result['shortUrl'],
-                    'status' => $result['status'] ?? 0
+                    'status' => 'Criado'
+                    //'status_cielo' => 0
                 );
             } elseif (isset($result['id'])) {
                 // Se não tiver shortUrl, criar o link do produto
@@ -194,7 +219,8 @@ class CieloAPI {
                         'success' => true,
                         'payment_id' => $result['id'],
                         'link' => $link_response,
-                        'status' => $result['status'] ?? 0
+                        'status' => 'Criado'
+                        //'status_cielo' => 0
                     );
                 }
             }
@@ -202,7 +228,9 @@ class CieloAPI {
             return array(
                 'success' => false,
                 'error' => 'Link criado mas URL não encontrada',
-                'raw_response' => $response
+                'raw_response' => $response,
+                'status' => 'Criado'
+                //'status_cielo' => 0
             );
         }
         
@@ -228,7 +256,9 @@ class CieloAPI {
             'success' => false,
             'error' => $error_message,
             'http_code' => $http_code,
-            'raw_response' => $response
+            'raw_response' => $response,
+            'status' => 'Criado'
+            //'status_cielo' => 0
         );
     }
     
@@ -441,7 +471,7 @@ class CieloAPI {
                         'data_expiracao' => $result['expirationDate'],
                         'url_completa' => $result['links'][0]['url'] ?? null,
                         'url_curta' => $result['shortUrl'] ?? null,
-                        'status' => $result['status']
+                        'status' => $this->mapCieloStatus($result['status'] ?? 'Criado')
                     )
                 );
             }

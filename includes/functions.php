@@ -8,15 +8,60 @@ require_once PROJECT_ROOT . '/config/config.php';
 require_once PROJECT_ROOT . '/config/database.php';
 require_once PROJECT_ROOT . '/config/cielo.php';
 
-function calculateInterest($amount, $installments) {
-    if ($installments >= 4 && $installments <= 6) {
-        return $amount * 0.04; // 4% interest
+function calculateInterest($amount, $installments, $credencial = 'matriz') {
+    global $PARCELAS_CONFIG;
+    
+    // Se a credencial não existir na configuração, usa matriz como padrão
+    if (!isset($PARCELAS_CONFIG[$credencial])) {
+        $credencial = 'matriz';
     }
-    return 0;
+    
+    $config = $PARCELAS_CONFIG[$credencial];
+    
+    // Se o número de parcelas for menor ou igual ao limite sem juros
+    if ($installments <= $config['parcelas_sem_juros']) {
+        return 0;
+    }
+    
+    // Se o número de parcelas for maior que o máximo permitido
+    if ($installments > $config['max_parcelas']) {
+        throw new Exception('Número de parcelas maior que o permitido');
+    }
+    
+    // Calcula os juros conforme configuração
+    return $amount * ($config['juros_percentual'] / 100);
 }
 
-function calculateFinalAmount($amount, $installments) {
-    return $amount + calculateInterest($amount, $installments);
+function calculateFinalAmount($amount, $installments, $credencial = 'matriz') {
+    return $amount + calculateInterest($amount, $installments, $credencial);
+}
+
+function getMaxInstallments($credencial = 'matriz') {
+    global $PARCELAS_CONFIG;
+    
+    // Se a credencial não existir na configuração, usa matriz como padrão
+    if (!isset($PARCELAS_CONFIG[$credencial])) {
+        $credencial = 'matriz';
+    }
+    
+    return $PARCELAS_CONFIG[$credencial]['max_parcelas'];
+}
+
+function getInstallmentsInfo($credencial = 'matriz') {
+    global $PARCELAS_CONFIG;
+    
+    // Se a credencial não existir na configuração, usa matriz como padrão
+    if (!isset($PARCELAS_CONFIG[$credencial])) {
+        $credencial = 'matriz';
+    }
+    
+    $config = $PARCELAS_CONFIG[$credencial];
+    
+    return [
+        'max_parcelas' => $config['max_parcelas'],
+        'parcelas_sem_juros' => $config['parcelas_sem_juros'],
+        'juros_percentual' => $config['juros_percentual']
+    ];
 }
 
 function createPaymentLink($user_id, $amount, $installments, $description = '') {
@@ -68,7 +113,7 @@ function createPaymentLink($user_id, $amount, $installments, $description = '') 
         // Save to database
         error_log("Preparando para salvar no banco de dados");
         $query = "INSERT INTO payment_links (user_id, valor_original, valor_juros, valor_final, parcelas, link_url, payment_id, product_id, status, status_cielo, descricao, tipo_link, data_expiracao, url_completa, url_curta, created_at) 
-                  VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, :product_id, 'Aguardando Pagamento', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
+                  VALUES (:user_id, :valor_original, :valor_juros, :valor_final, :parcelas, :link_url, :payment_id, :product_id, 'Criado', :status_cielo, :descricao, :tipo_link, :data_expiracao, :url_completa, :url_curta, NOW())";
         
         try {
             $stmt = $conn->prepare($query);
@@ -188,7 +233,8 @@ function getPaymentLinks($user_id, $user_level, $filters = [], $page = 1, $per_p
     }
     
     // Monta a query base
-    $query = "FROM payment_links pl 
+    $query = "SELECT pl.*, u.nome as nome_usuario 
+             FROM payment_links pl 
              LEFT JOIN usuarios u ON pl.user_id = u.id";
     
     // Adiciona as condições WHERE se houver
@@ -196,40 +242,61 @@ function getPaymentLinks($user_id, $user_level, $filters = [], $page = 1, $per_p
         $query .= " WHERE " . implode(" AND ", $conditions);
     }
     
-    // Conta total de registros
-    $count_query = "SELECT COUNT(*) as total " . $query;
-    $stmt = $conn->prepare($count_query);
-    $stmt->execute($params);
-    $total = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    // Adiciona ordenação
+    $query .= " ORDER BY pl.created_at DESC";
     
-    // Calcula offset para paginação
-    $offset = ($page - 1) * $per_page;
-    
-    // Query final com paginação
-    $query = "SELECT pl.*, u.nome as nome_usuario " . $query . " 
-             ORDER BY pl.created_at DESC 
-             LIMIT :limit OFFSET :offset";
-    
-    $stmt = $conn->prepare($query);
-    
-    // Adiciona parâmetros de paginação
-    $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    
-    // Adiciona os demais parâmetros
-    foreach ($params as $key => $value) {
-        $stmt->bindValue($key, $value);
+    // Calcula total de registros
+    $count_query = "SELECT COUNT(*) as total FROM payment_links pl";
+    if (!empty($conditions)) {
+        $count_query .= " WHERE " . implode(" AND ", $conditions);
     }
     
-    $stmt->execute();
-    $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    return [
-        'links' => $links,
-        'total' => $total,
-        'pages' => ceil($total / $per_page),
-        'current_page' => $page
-    ];
+    try {
+        // Executa query de contagem
+        $stmt = $conn->prepare($count_query);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        $total_records = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+        
+        // Calcula paginação
+        $total_pages = ceil($total_records / $per_page);
+        $page = max(1, min($page, $total_pages));
+        $offset = ($page - 1) * $per_page;
+        
+        // Adiciona LIMIT e OFFSET para paginação
+        $query .= " LIMIT :limit OFFSET :offset";
+        
+        // Executa query principal
+        $stmt = $conn->prepare($query);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $per_page, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        $links = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        return array(
+            'links' => $links,
+            'total_records' => $total_records,
+            'total_pages' => $total_pages,
+            'current_page' => $page,
+            'per_page' => $per_page
+        );
+        
+    } catch (Exception $e) {
+        error_log("Erro ao buscar links: " . $e->getMessage());
+        return array(
+            'links' => [],
+            'total_records' => 0,
+            'total_pages' => 1,
+            'current_page' => 1,
+            'per_page' => $per_page
+        );
+    }
 }
 
 function updatePaymentStatus($link_id, $new_status, $user_level) {
@@ -279,6 +346,8 @@ function updatePaymentStatus($link_id, $new_status, $user_level) {
 }
 
 function formatCurrency($value) {
+    // Garante que o valor é um número
+    $value = floatval($value ?? 0);
     return 'R$ ' . number_format($value, 2, ',', '.');
 }
 
@@ -293,14 +362,18 @@ function formatDate($date) {
 
 function getStatusBadgeClass($status) {
     switch ($status) {
-        case 'Criado':
-            return 'bg-info';
-        case 'Crédito':
+        case 'Pago':
             return 'bg-success';
-        case 'Utilizado':
-            return 'bg-warning';
-        case 'Inativo':
+        case 'Criado':
+            return 'bg-warning text-dark';
+        case 'Cancelado':
             return 'bg-danger';
+        case 'Crédito':
+            return 'bg-info';
+        case 'Utilizado':
+            return 'bg-primary';
+        case 'Inativo':
+            return 'bg-secondary';
         default:
             return 'bg-secondary';
     }
@@ -308,14 +381,18 @@ function getStatusBadgeClass($status) {
 
 function getStatusIcon($status) {
     switch ($status) {
-        case 'Criado':
-            return 'fa-file-alt';
-        case 'Crédito':
+        case 'Pago':
             return 'fa-check-circle';
-        case 'Utilizado':
+        case 'Criado':
             return 'fa-clock';
-        case 'Inativo':
+        case 'Cancelado':
             return 'fa-ban';
+        case 'Crédito':
+            return 'fa-credit-card';
+        case 'Utilizado':
+            return 'fa-check';
+        case 'Inativo':
+            return 'fa-times-circle';
         default:
             return 'fa-question-circle';
     }

@@ -1,4 +1,7 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 session_start();
 require_once 'includes/auth.php';
 require_once 'includes/functions.php';
@@ -10,7 +13,8 @@ $user_name = $_SESSION['nome'];
 $user_level = $_SESSION['nivel_acesso'];
 
 // Get recent payment links
-$recent_links = array_slice(getPaymentLinks($user_id, $user_level), 0, 5);
+$result = getPaymentLinks($user_id, $user_level);
+$recent_links = array_slice($result['links'] ?? [], 0, 5);
 
 // Get statistics
 $database = new Database();
@@ -25,17 +29,17 @@ $stats = array(
 
 try {
     if (in_array($user_level, ['admin', 'editor'])) {
-        $query = "SELECT COUNT(*) as total, SUM(valor_final) as total_amount FROM payment_links";
+        $query = "SELECT COUNT(*) as total, COALESCE(SUM(valor_final), 0) as total_amount FROM payment_links";
         $stmt = $db->prepare($query);
     } else {
-        $query = "SELECT COUNT(*) as total, SUM(valor_final) as total_amount FROM payment_links WHERE user_id = :user_id";
+        $query = "SELECT COUNT(*) as total, COALESCE(SUM(valor_final), 0) as total_amount FROM payment_links WHERE user_id = :user_id";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':user_id', $user_id);
     }
     $stmt->execute();
     $result = $stmt->fetch();
-    $stats['total_links'] = $result['total'] ?? 0;
-    $stats['total_amount'] = $result['total_amount'] ?? 0;
+    $stats['total_links'] = intval($result['total'] ?? 0);
+    $stats['total_amount'] = intval($result['total_amount'] ?? 0);
     
     // Get paid links count
     if (in_array($user_level, ['admin', 'editor'])) {
@@ -48,7 +52,7 @@ try {
     }
     $stmt->execute();
     $result = $stmt->fetch();
-    $stats['paid_links'] = $result['paid'] ?? 0;
+    $stats['paid_links'] = intval($result['paid'] ?? 0);
     
     $stats['pending_links'] = $stats['total_links'] - $stats['paid_links'];
 } catch (Exception $e) {
@@ -66,28 +70,7 @@ try {
     <link href="css/style.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="dashboard.php">
-                <i class="fas fa-credit-card me-2"></i>Sistema de Pagamento
-            </a>
-            
-            <div class="navbar-nav ms-auto">
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="fas fa-user me-1"></i><?php echo htmlspecialchars($user_name); ?>
-                        <?php if ($user_level !== 'usuario'): ?>
-                            <span class="badge bg-warning ms-1"><?php echo strtoupper($user_level); ?></span>
-                        <?php endif; ?>
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Sair</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <?php include 'includes/navbar.php'; ?>
     
     <!-- Main Content -->
     <div class="container-fluid py-4">
@@ -243,21 +226,21 @@ try {
                                                     <tr>
                                                         <td>
                                                             <div>
-                                                                <strong><?php echo formatCurrency($link['valor_final']); ?></strong>
-                                                                <?php if ($link['valor_juros'] > 0): ?>
-                                                                    <br><small class="text-muted">Original: <?php echo formatCurrency($link['valor_original']); ?></small>
+                                                                <strong><?php echo formatCurrency($link['valor_final'] ?? 0); ?></strong>
+                                                                <?php if (!empty($link['valor_juros']) && $link['valor_juros'] > 0): ?>
+                                                                    <br><small class="text-muted">Original: <?php echo formatCurrency($link['valor_original'] ?? 0); ?></small>
                                                                 <?php endif; ?>
                                                             </div>
                                                         </td>
-                                                        <td><?php echo $link['parcelas']; ?>x</td>
+                                                        <td><?php echo ($link['parcelas'] ?? 0); ?>x</td>
                                                         <td>
-                                                            <span class="badge <?php echo getStatusBadgeClass($link['status']); ?>">
-                                                                <?php echo htmlspecialchars($link['status']); ?>
+                                                            <span class="badge <?php echo getStatusBadgeClass($link['status'] ?? ''); ?>">
+                                                                <?php echo htmlspecialchars($link['status'] ?? 'N/A'); ?>
                                                             </span>
                                                         </td>
-                                                        <td><?php echo date('d/m/Y H:i', strtotime($link['created_at'])); ?></td>
+                                                        <td><?php echo !empty($link['created_at']) ? date('d/m/Y H:i', strtotime($link['created_at'])) : 'N/A'; ?></td>
                                                         <?php if (in_array($user_level, ['admin', 'editor'])): ?>
-                                                            <td><?php echo htmlspecialchars($link['user_name'] ?? 'N/A'); ?></td>
+                                                            <td><?php echo htmlspecialchars($link['nome_usuario'] ?? 'N/A'); ?></td>
                                                         <?php endif; ?>
                                                         <td>
                                                             <?php if (!empty($link['link_url'])): ?>

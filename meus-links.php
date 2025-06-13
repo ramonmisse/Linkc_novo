@@ -37,7 +37,7 @@ if (in_array($user_level, ['admin', 'editor'])) {
 // Get all payment links with pagination
 $result = getPaymentLinks($user_id, $user_level, $filters, $page);
 $payment_links = $result['links'];
-$total_pages = $result['pages'];
+$total_pages = $result['total_pages'];
 $current_page = $result['current_page'];
 
 // Handle status update
@@ -52,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     // Refresh the links after update
     $result = getPaymentLinks($user_id, $user_level, $filters, $page);
     $payment_links = $result['links'];
+    $total_pages = $result['total_pages'];
+    $current_page = $result['current_page'];
 }
 
 // Busca lista de usuários para o filtro (apenas admin e editor)
@@ -255,7 +257,7 @@ if (in_array($user_level, ['admin', 'editor'])) {
                                         <?php foreach ($payment_links as $link): ?>
                                             <tr>
                                                 <td><?php echo htmlspecialchars($link['descricao'] ?? ''); ?></td>
-                                                <td>R$ <?php echo number_format(($link['valor_final'] ?? 0) / 100, 2, ',', '.'); ?></td>
+                                                <td>R$ <?php echo number_format(($link['valor_final'] ?? 0), 2, ',', '.'); ?></td>
                                                 <td><?php echo $link['parcelas']; ?>x</td>
                                                 <td>
                                                     <span class="badge <?php echo getStatusBadgeClass($link['status']); ?>">

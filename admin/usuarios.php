@@ -15,6 +15,30 @@ if ($_SESSION['nivel_acesso'] !== 'admin') {
 $db = new Database();
 $conn = $db->getConnection();
 
+// Processa criação de usuário
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_user'])) {
+    $nome = $_POST['nome'];
+    $email = $_POST['email'];
+    $senha = password_hash($_POST['senha'], PASSWORD_DEFAULT);
+    $nivel_acesso = $_POST['nivel_acesso'];
+    $credencial = $_POST['credencial'];
+    $ativo = isset($_POST['ativo']) ? 1 : 0;
+    
+    try {
+        $stmt = $conn->prepare("
+            INSERT INTO usuarios (nome, email, senha_hash, nivel_acesso, credencial_cielo, ativo)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        
+        $stmt->execute([$nome, $email, $senha, $nivel_acesso, $credencial, $ativo]);
+        $message = "Usuário criado com sucesso!";
+        $message_type = "success";
+    } catch (Exception $e) {
+        $message = "Erro ao criar usuário: " . $e->getMessage();
+        $message_type = "danger";
+    }
+}
+
 // Processa atualização de usuário
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_user'])) {
     $user_id = intval($_POST['user_id']);
@@ -86,8 +110,11 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <!-- Main Content Area -->
             <div class="col-md-9 col-lg-10">
                 <div class="row mb-4">
-                    <div class="col-12">
+                    <div class="col-12 d-flex justify-content-between align-items-center">
                         <h1 class="h3">Administração de Usuários</h1>
+                        <button class="btn btn-primary" onclick="showCreateUserModal()">
+                            <i class="fas fa-plus me-2"></i>Novo Usuário
+                        </button>
                     </div>
                 </div>
                 
@@ -211,6 +238,66 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
+
+    <!-- Modal de Criação -->
+    <div class="modal fade" id="createUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Usuário</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="create_user" value="1">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nome</label>
+                            <input type="text" class="form-control" name="nome" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" name="email" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Senha</label>
+                            <input type="password" class="form-control" name="senha" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nível de Acesso</label>
+                            <select name="nivel_acesso" class="form-select" required>
+                                <option value="usuario">Usuário</option>
+                                <option value="editor">Editor</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Credencial Cielo</label>
+                            <select name="credencial" class="form-select" required>
+                                <option value="matriz">Matriz</option>
+                                <option value="filial">Filial</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="ativo" checked>
+                                <label class="form-check-label">Usuário Ativo</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Criar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -223,6 +310,11 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById('edit_ativo').checked = user.ativo == 1;
             
             const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+            modal.show();
+        }
+
+        function showCreateUserModal() {
+            const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
             modal.show();
         }
     </script>
